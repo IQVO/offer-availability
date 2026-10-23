@@ -103,7 +103,7 @@ jobs:
       - name: Unit tests with coverage + gate (make coverage)
         run: make coverage
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: always()
         with:
           name: coverage
@@ -139,11 +139,10 @@ jobs:
       - name: Integration tests (testcontainers; each test boots its own Postgres/Kafka)
         run: go test -tags=integration ./... -race -count=1
 
-  # Fast, BLOCKING mutation subset: runs on every push/PR so a drop in test
+  # Fast, BLOCKING mutation gate: runs on every push/PR so a drop in test
   # quality (tests that execute but stop asserting) is caught immediately.
-  # Subset = ./internal/domain/listing, the StockUnit aggregate: the richest
-  # behavioural core in the domain (15 of the 41 domain mutants) and it
-  # completes in ~1 minute. Thresholds/workers/timeout come from .gremlins.yaml,
+  # It loops gremlins over EVERY package under internal/domain/, one package at
+  # a time, exactly as `make mutation` does. Thresholds/workers/timeout come from .gremlins.yaml,
   # so this job, the scheduled `mutation` job below and `make mutation` all
   # agree. The exhaustive run stays in the `mutation` job.
   # ============================================================
@@ -151,7 +150,7 @@ jobs:
   # ============================================================
   mutation-fast:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -159,8 +158,12 @@ jobs:
           go-version-file: go.mod
       - name: Install gremlins
         run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0
-      - name: Mutation testing (fast subset — listing aggregate)
-        run: gremlins unleash ./internal/domain/listing
+      - name: Mutation testing (every domain package)
+        run: |
+          for pkg in ./internal/domain/*/; do
+            echo "== gremlins unleash ${pkg%/}"
+            gremlins unleash "${pkg%/}" || exit 1
+          done
 
   mutation:
     runs-on: ubuntu-latest
@@ -197,7 +200,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: "20"
       - name: Install Spectral
@@ -224,6 +227,33 @@ jobs:
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: govulncheck
         run: govulncheck ./...
+
+  # Packaging validation: chart lint (every charts/offer-availability/ci/*-values.yaml)
+  # + the wiring test (the Service selects exactly one Deployment). Not a
+  # required check. Pull requests only: the job-level condition is a plain
+  # event test (never hashFiles, which is not available at job level).
+  helm-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
+        with:
+          version: v3.16.4
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.x"
+          check-latest: true
+      - uses: helm/chart-testing-action@720270857a28afd41e2426521a7801db09e9b510 # v2.9.0
+      - name: Run chart-testing (lint)
+        run: ct lint --charts charts/offer-availability --validate-maintainers=false --check-version-increment=false
+      - name: Chart wiring tests (the Service selects exactly one Deployment)
+        run: |
+          pip install --require-hashes -r .github/requirements/chart-tests.txt
+          python3 charts/offer-availability/tests/test_service_selectors.py
 
   # ============================================================
   # CLASSIFICATION: PACKAGING (Helm chart tests)

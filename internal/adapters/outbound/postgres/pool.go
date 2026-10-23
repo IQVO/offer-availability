@@ -1,0 +1,33 @@
+// Package postgres provides pgxpool-backed implementations of the outbound
+// ports plus a golang-migrate runner over the SQL migrations EMBEDDED in this
+// package (migrations/), so the binary needs no migrations directory on disk.
+package postgres
+
+import (
+	"context"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+// MaxConns is this adapter's per-process connection ceiling.
+const MaxConns = 10
+
+// StatementTimeout bounds how long a single statement may hold a connection. A
+// 10000-line feed is a handful of bulk statements, far below it.
+const StatementTimeout = "10s"
+
+// NewPool opens a connection pool against databaseURL with MaxConns and
+// StatementTimeout applied to every connection.
+func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	config.MaxConns = MaxConns
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET statement_timeout = '"+StatementTimeout+"'")
+		return err
+	}
+	return pgxpool.NewWithConfig(ctx, config)
+}

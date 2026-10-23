@@ -1,0 +1,647 @@
+asyncapi: 3.0.0
+
+info:
+  title: offer-availability Domain Events
+  version: "1.0.0"
+  contact:
+    name: offer-availability maintainers
+    url: https://github.com/IQVO/offer-availability
+    email: offer-availability@iqvo.example.com
+  license:
+    name: UNLICENSED
+  tags:
+    - name: offer-availability
+      description: The offer-availability bounded context (retail network, commerce tier).
+    - name: catalogitem
+      description: Events raised by the CatalogItem aggregate.
+    - name: listing
+      description: Events raised by the Listing aggregate.
+    - name: inventoryfeed
+      description: Events raised by the InventoryFeed aggregate.
+    - name: node-topology
+      description: Events consumed from the node-topology bounded context.
+  description: |
+    Event catalog for the **offer-availability** bounded context of the retail
+    network (commerce tier): the network's catalogue items, one listing per
+    (catalogue item, node) and the quantity each node claims it can ship, with
+    the basis the vendor gave (ADR 0001, ADR 0002).
+
+    **Published.** Seven events, all integration events on the topic
+    `retailnetwork.offer-availability.events`, through a **transactional
+    outbox**: the aggregates and their already-encoded events are written in ONE
+    database transaction and an always-on relay drains them to Kafka
+    (at-least-once; the CloudEvents `id` is stored with the outbox row, so a
+    retry republishes the same `id`). The seven types are catalogued in ADR 0004.
+    A listing created on a node that is not sellable raises ListingCreated and,
+    in the same transaction, ListingSuppressed (ADR 0002, A6), so a consumer
+    never has to guess the initial state.
+
+    **Consumed.** Four node-topology events (`NodeRegistered`, `NodeActivated`,
+    `NodeSuspended`, `NodeRetired`) from `retailnetwork.node-topology.events`,
+    in the consumer group given by `NODE_STATUS_CONSUMER_GROUP` (proposed value
+    `offer-availability-node-status`). They feed the local NodeStatusView and
+    drive the SuppressOnNodeUnavailable policy (ADR 0003). The consumer
+    dispatches on the full `type`, ignores every other type, tolerates unknown
+    fields, and dedupes on the CloudEvents `id` (inbox table `processed_events`).
+
+    **Analytics.** The model names no analytics-only event for this context, so
+    nothing is published on `retailnetwork.offer-availability.analytics`.
+
+    **Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka
+    header `content-type: application/cloudevents+json; charset=UTF-8`.
+    `specversion`, `id`, `source` (`/retailnetwork/offer-availability`), `type`,
+    `subject` (the aggregate root id), `time`, `datacontenttype`
+    (`application/json`) and `dataschema`
+    (`urn:retailnetwork:offer-availability:events:<EventName>:v1`) are all
+    required. Kafka key = the subject, so one aggregate's events stay ordered on
+    one partition. Type =
+    `com.retailnetwork.commerce.offer-availability.<entity>.<EventName>` with
+    entity `catalogitem`, `listing` or `inventoryfeed`. A breaking payload
+    change is a new `.v2` type, never a mutation. Dispatch on the full `type`,
+    ignore unknown types, dedupe on `id`.
+
+    **Conventions.** `data` is camelCase; ids are strings; timestamps are RFC
+    3339 UTC; counts are integers; enums are UPPER_SNAKE; optional fields are
+    omitted when unset (never null).
+
+servers:
+  production:
+    host: "{brokers}"
+    protocol: kafka
+    description: Retail-network Kafka broker (host supplied by the deployment environment via KAFKA_BROKERS).
+    variables:
+      brokers:
+        default: "kafka.retail-network.internal:9092"
+
+defaultContentType: application/cloudevents+json
+
+channels:
+  offerAvailabilityEvents:
+    address: retailnetwork.offer-availability.events
+    title: offer-availability integration topic
+    description: |
+      This service's integration topic. Written by the outbox relay; key =
+      subject (catalogItemId, listingId or feedId). Every message carries the
+      CloudEvents content-type header. Dispatch on the full `type`, ignore
+      unknown types, dedupe on `id`.
+    messages:
+      CatalogItemCreated:
+        $ref: "#/components/messages/CatalogItemCreated"
+      CatalogItemDiscontinued:
+        $ref: "#/components/messages/CatalogItemDiscontinued"
+      ListingCreated:
+        $ref: "#/components/messages/ListingCreated"
+      ListingAvailabilityChanged:
+        $ref: "#/components/messages/ListingAvailabilityChanged"
+      ListingSuppressed:
+        $ref: "#/components/messages/ListingSuppressed"
+      ListingRestored:
+        $ref: "#/components/messages/ListingRestored"
+      InventoryFeedApplied:
+        $ref: "#/components/messages/InventoryFeedApplied"
+  nodeTopologyEvents:
+    address: retailnetwork.node-topology.events
+    title: node-topology integration topic (consumed)
+    description: |
+      Owned by node-topology; consumed here. Key = nodeId, so one node's events
+      arrive in order on one partition. Only the four node lifecycle types below
+      are used; every other type on the topic is acknowledged and ignored.
+    messages:
+      NodeRegistered:
+        $ref: "#/components/messages/NodeRegistered"
+      NodeActivated:
+        $ref: "#/components/messages/NodeActivated"
+      NodeSuspended:
+        $ref: "#/components/messages/NodeSuspended"
+      NodeRetired:
+        $ref: "#/components/messages/NodeRetired"
+
+operations:
+  publishOfferAvailabilityEvents:
+    action: send
+    title: Publish offer-availability events
+    summary: Publish the seven offer-availability events through the transactional outbox.
+    description: |
+      The service sends every event of its three aggregates (CatalogItem,
+      Listing, InventoryFeed) to `retailnetwork.offer-availability.events`.
+      Consumers route on the full `type`.
+    tags:
+      - name: offer-availability
+    channel:
+      $ref: "#/channels/offerAvailabilityEvents"
+    messages:
+      - $ref: "#/channels/offerAvailabilityEvents/messages/CatalogItemCreated"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/CatalogItemDiscontinued"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/ListingCreated"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/ListingAvailabilityChanged"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/ListingSuppressed"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/ListingRestored"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/InventoryFeedApplied"
+  receiveNodeTopologyEvents:
+    action: receive
+    title: Receive node-topology node lifecycle events
+    summary: Fold node status into NodeStatusView and apply SuppressOnNodeUnavailable.
+    description: |
+      Consumed from `retailnetwork.node-topology.events` in the group named by
+      NODE_STATUS_CONSUMER_GROUP. NodeRegistered inserts the node as PROPOSED;
+      NodeActivated sets it ACTIVE and restores the listings of the node that
+      are suppressed for NODE_NOT_SELLABLE; NodeSuspended and NodeRetired set it
+      SUSPENDED or RETIRED and suppress every LIVE listing of the node. The
+      fields read are exactly the ones in the payload schemas below; everything
+      else in the producer's payload is ignored. Each CloudEvents id is recorded
+      in `processed_events` in the same transaction as its effects.
+    tags:
+      - name: node-topology
+    channel:
+      $ref: "#/channels/nodeTopologyEvents"
+    messages:
+      - $ref: "#/channels/nodeTopologyEvents/messages/NodeRegistered"
+      - $ref: "#/channels/nodeTopologyEvents/messages/NodeActivated"
+      - $ref: "#/channels/nodeTopologyEvents/messages/NodeSuspended"
+      - $ref: "#/channels/nodeTopologyEvents/messages/NodeRetired"
+
+components:
+  messages:
+    CatalogItemCreated:
+      name: CatalogItemCreated
+      title: Catalogue item created
+      summary: A catalogue item was created in state ACTIVE.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated`; subject and key = the catalogItemId. Raised by CreateCatalogItem. Dimensions are in millimetres and the weight in grams, all positive."
+      contentType: application/cloudevents+json
+      tags:
+        - name: catalogitem
+      payload:
+        $ref: "#/components/schemas/CatalogItemCreatedEvent"
+      examples:
+        - name: catalogItemCreated
+          summary: A catalogue item was created.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a10"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated"
+            subject: "item-004512"
+            time: "2026-10-23T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:CatalogItemCreated:v1"
+            data:
+              catalogItemId: "item-004512"
+              title: "Stainless steel water bottle 750 ml"
+              lengthMm: 270
+              widthMm: 75
+              heightMm: 75
+              weightG: 340
+              hazmat: false
+              fragile: false
+
+    CatalogItemDiscontinued:
+      name: CatalogItemDiscontinued
+      title: Catalogue item discontinued
+      summary: A catalogue item moved from ACTIVE to DISCONTINUED.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued`; subject and key = the catalogItemId. Raised by DiscontinueItem. Every listing of the item is suppressed in the same transaction (reason DISCONTINUED), each with its own ListingSuppressed."
+      contentType: application/cloudevents+json
+      tags:
+        - name: catalogitem
+      payload:
+        $ref: "#/components/schemas/CatalogItemDiscontinuedEvent"
+      examples:
+        - name: catalogItemDiscontinued
+          summary: A catalogue item was discontinued.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a11"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued"
+            subject: "item-004512"
+            time: "2026-10-23T09:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:CatalogItemDiscontinued:v1"
+            data:
+              catalogItemId: "item-004512"
+
+    ListingCreated:
+      name: ListingCreated
+      title: Listing created
+      summary: A catalogue item is now offered from a node.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingCreated`; subject and key = the listingId. Raised by CreateListing. The event does not say whether the listing starts LIVE: a listing created on a node that is not sellable, or for a discontinued item, is followed in the same transaction by a ListingSuppressed. Availability starts at 0 with basis UNKNOWN until the first feed."
+      contentType: application/cloudevents+json
+      tags:
+        - name: listing
+      payload:
+        $ref: "#/components/schemas/ListingCreatedEvent"
+      examples:
+        - name: listingCreated
+          summary: A listing was created.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a12"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.listing.ListingCreated"
+            subject: "lst-000184"
+            time: "2026-10-23T09:05:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:ListingCreated:v1"
+            data:
+              listingId: "lst-000184"
+              catalogItemId: "item-004512"
+              nodeId: "node-0f3a91"
+
+    ListingAvailabilityChanged:
+      name: ListingAvailabilityChanged
+      title: Listing availability changed
+      summary: A feed replaced the available quantity of a listing.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged`; subject and key = the listingId. Raised once per feed line that was applied and once per listing zeroed by FullFeedZeroing (a zeroed listing keeps its basis and gets the feed's asOf). `asOf` is strictly increasing per listing, so a consumer keeps the highest. Raised for a SUPPRESSED listing too: the state is carried by ListingSuppressed/ListingRestored, not here."
+      contentType: application/cloudevents+json
+      tags:
+        - name: listing
+      payload:
+        $ref: "#/components/schemas/ListingAvailabilityChangedEvent"
+      examples:
+        - name: listingAvailabilityChanged
+          summary: A feed replaced the quantity of a listing.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a13"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged"
+            subject: "lst-000184"
+            time: "2026-10-23T14:05:12Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:ListingAvailabilityChanged:v1"
+            data:
+              listingId: "lst-000184"
+              catalogItemId: "item-004512"
+              nodeId: "node-0f3a91"
+              availableQty: 120
+              basis: THROUGHPUT_CONSTRAINED
+              asOf: "2026-10-23T14:00:00Z"
+              feedId: "feed-20261023-0007"
+
+    ListingSuppressed:
+      name: ListingSuppressed
+      title: Listing suppressed
+      summary: A listing stopped being sellable.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed`; subject and key = the listingId. Raised by SuppressListing: on NodeSuspended/NodeRetired (reason NODE_NOT_SELLABLE), on creation for a node that is not sellable (NODE_NOT_SELLABLE) or a discontinued item (DISCONTINUED), and on DiscontinueItem (DISCONTINUED). A listing suppressed for NODE_NOT_SELLABLE that is then suppressed for DISCONTINUED raises a second ListingSuppressed with the new reason. DISCONTINUED is final."
+      contentType: application/cloudevents+json
+      tags:
+        - name: listing
+      payload:
+        $ref: "#/components/schemas/ListingSuppressedEvent"
+      examples:
+        - name: listingSuppressed
+          summary: A listing was suppressed because its node was suspended.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a14"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed"
+            subject: "lst-000184"
+            time: "2026-10-23T15:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:ListingSuppressed:v1"
+            data:
+              listingId: "lst-000184"
+              nodeId: "node-0f3a91"
+              reason: NODE_NOT_SELLABLE
+
+    ListingRestored:
+      name: ListingRestored
+      title: Listing restored
+      summary: A suppressed listing became LIVE again.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingRestored`; subject and key = the listingId. Raised by RestoreListing when the node became ACTIVE again and the listing had been suppressed for NODE_NOT_SELLABLE. A listing suppressed for DISCONTINUED is never restored."
+      contentType: application/cloudevents+json
+      tags:
+        - name: listing
+      payload:
+        $ref: "#/components/schemas/ListingRestoredEvent"
+      examples:
+        - name: listingRestored
+          summary: A listing was restored because its node was activated.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a15"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.listing.ListingRestored"
+            subject: "lst-000184"
+            time: "2026-10-23T16:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:ListingRestored:v1"
+            data:
+              listingId: "lst-000184"
+              nodeId: "node-0f3a91"
+
+    InventoryFeedApplied:
+      name: InventoryFeedApplied
+      title: Inventory feed applied
+      summary: A vendor inventory feed reached APPLIED.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedApplied`; subject and key = the feedId. Raised once by ApplyInventoryFeed when the feed reaches APPLIED, after the ListingAvailabilityChanged events of the same transaction. A FAILED or SUPERSEDED feed raises nothing. `lineCount` is the number of lines as received."
+      contentType: application/cloudevents+json
+      tags:
+        - name: inventoryfeed
+      payload:
+        $ref: "#/components/schemas/InventoryFeedAppliedEvent"
+      examples:
+        - name: inventoryFeedApplied
+          summary: A full feed was applied.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a16"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedApplied"
+            subject: "feed-20261023-0007"
+            time: "2026-10-23T14:05:12Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:InventoryFeedApplied:v1"
+            data:
+              feedId: "feed-20261023-0007"
+              nodeId: "node-0f3a91"
+              fullUpdate: true
+              lineCount: 412
+              appliedAt: "2026-10-23T14:05:12Z"
+
+    NodeRegistered:
+      name: NodeRegistered
+      title: Node registered (consumed)
+      summary: node-topology registered a node in state PROPOSED.
+      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeRegistered`. Only `nodeId` is read: it inserts the node into NodeStatusView as PROPOSED when the node is not known yet; for a known node it is a no-op. Every other field of the producer's payload is ignored."
+      contentType: application/cloudevents+json
+      tags:
+        - name: node-topology
+      payload:
+        $ref: "#/components/schemas/NodeRegisteredIn"
+      examples:
+        - name: nodeRegistered
+          summary: A node was registered.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c40"
+            source: "/retailnetwork/node-topology"
+            type: "com.retailnetwork.logistics.node-topology.node.NodeRegistered"
+            subject: "node-0f3a91"
+            time: "2026-10-22T13:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:node-topology:events:NodeRegistered:v1"
+            data:
+              nodeId: "node-0f3a91"
+              nodeType: FULFILLMENT_CENTER
+
+    NodeActivated:
+      name: NodeActivated
+      title: Node activated (consumed)
+      summary: node-topology activated a node.
+      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeActivated`. Sets the node ACTIVE in NodeStatusView at `activatedAt`, then restores every listing of the node suppressed for NODE_NOT_SELLABLE (one ListingRestored each)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: node-topology
+      payload:
+        $ref: "#/components/schemas/NodeActivatedIn"
+      examples:
+        - name: nodeActivated
+          summary: A node was activated.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c41"
+            source: "/retailnetwork/node-topology"
+            type: "com.retailnetwork.logistics.node-topology.node.NodeActivated"
+            subject: "node-0f3a91"
+            time: "2026-10-22T13:10:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:node-topology:events:NodeActivated:v1"
+            data:
+              nodeId: "node-0f3a91"
+              activatedAt: "2026-10-22T13:10:00Z"
+
+    NodeSuspended:
+      name: NodeSuspended
+      title: Node suspended (consumed)
+      summary: node-topology suspended a node.
+      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeSuspended`. Sets the node SUSPENDED in NodeStatusView at `suspendedAt`, then suppresses every LIVE listing of the node (reason NODE_NOT_SELLABLE, one ListingSuppressed each)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: node-topology
+      payload:
+        $ref: "#/components/schemas/NodeSuspendedIn"
+      examples:
+        - name: nodeSuspended
+          summary: A node was suspended.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c42"
+            source: "/retailnetwork/node-topology"
+            type: "com.retailnetwork.logistics.node-topology.node.NodeSuspended"
+            subject: "node-0f3a91"
+            time: "2026-10-23T08:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:node-topology:events:NodeSuspended:v1"
+            data:
+              nodeId: "node-0f3a91"
+              reason: "inventory audit"
+              suspendedAt: "2026-10-23T08:00:00Z"
+
+    NodeRetired:
+      name: NodeRetired
+      title: Node retired (consumed)
+      summary: node-topology retired a node.
+      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeRetired`. Sets the node RETIRED (terminal) in NodeStatusView at `retiredAt`, then suppresses every LIVE listing of the node (reason NODE_NOT_SELLABLE)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: node-topology
+      payload:
+        $ref: "#/components/schemas/NodeRetiredIn"
+      examples:
+        - name: nodeRetired
+          summary: A node was retired.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1c43"
+            source: "/retailnetwork/node-topology"
+            type: "com.retailnetwork.logistics.node-topology.node.NodeRetired"
+            subject: "node-0f3a91"
+            time: "2026-10-23T18:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:node-topology:events:NodeRetired:v1"
+            data:
+              nodeId: "node-0f3a91"
+              retiredAt: "2026-10-23T18:00:00Z"
+
+  schemas:
+    CloudEventEnvelope:
+      type: object
+      required: [specversion, id, source, type, subject, time, datacontenttype, dataschema, data]
+      properties:
+        specversion: { type: string, const: "1.0" }
+        id: { type: string, format: uuid }
+        source: { type: string, const: /retailnetwork/offer-availability }
+        type: { type: string }
+        subject: { type: string, description: The aggregate root id (catalogItemId, listingId or feedId). }
+        time: { type: string, format: date-time }
+        datacontenttype: { type: string, const: application/json }
+        dataschema: { type: string }
+
+    Basis:
+      type: string
+      description: Why the node gave the number; kept as the vendor declared it, never re-derived.
+      enum: [PHYSICAL, THROUGHPUT_CONSTRAINED, UNKNOWN]
+
+    SuppressionReason:
+      type: string
+      enum: [NODE_NOT_SELLABLE, DISCONTINUED]
+
+    CatalogItemCreatedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile]
+              properties:
+                catalogItemId: { type: string }
+                title: { type: string }
+                lengthMm: { type: integer, minimum: 1 }
+                widthMm: { type: integer, minimum: 1 }
+                heightMm: { type: integer, minimum: 1 }
+                weightG: { type: integer, minimum: 1 }
+                hazmat: { type: boolean }
+                fragile: { type: boolean }
+
+    CatalogItemDiscontinuedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [catalogItemId]
+              properties:
+                catalogItemId: { type: string }
+
+    ListingCreatedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [listingId, catalogItemId, nodeId]
+              properties:
+                listingId: { type: string }
+                catalogItemId: { type: string }
+                nodeId: { type: string }
+
+    ListingAvailabilityChangedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [listingId, catalogItemId, nodeId, availableQty, basis, asOf, feedId]
+              properties:
+                listingId: { type: string }
+                catalogItemId: { type: string }
+                nodeId: { type: string }
+                availableQty: { type: integer, minimum: 0 }
+                basis: { $ref: "#/components/schemas/Basis" }
+                asOf: { type: string, format: date-time, description: The instant the number is true for; strictly increasing per listing. }
+                feedId: { type: string, description: The feed that carried the number. }
+
+    ListingSuppressedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [listingId, nodeId, reason]
+              properties:
+                listingId: { type: string }
+                nodeId: { type: string }
+                reason: { $ref: "#/components/schemas/SuppressionReason" }
+
+    ListingRestoredEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [listingId, nodeId]
+              properties:
+                listingId: { type: string }
+                nodeId: { type: string }
+
+    InventoryFeedAppliedEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [feedId, nodeId, fullUpdate, lineCount, appliedAt]
+              properties:
+                feedId: { type: string }
+                nodeId: { type: string }
+                fullUpdate: { type: boolean }
+                lineCount: { type: integer, minimum: 0, description: Lines in the feed as received. }
+                appliedAt: { type: string, format: date-time }
+
+    NodeRegisteredIn:
+      type: object
+      description: Tolerant copy of the node-topology NodeRegistered envelope; only the fields read are declared.
+      required: [id, type, time, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.logistics.node-topology.node.NodeRegistered }
+        time: { type: string, format: date-time }
+        data:
+          type: object
+          required: [nodeId]
+          properties:
+            nodeId: { type: string }
+
+    NodeActivatedIn:
+      type: object
+      description: Tolerant copy of the node-topology NodeActivated envelope; only the fields read are declared.
+      required: [id, type, time, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.logistics.node-topology.node.NodeActivated }
+        time: { type: string, format: date-time }
+        data:
+          type: object
+          required: [nodeId, activatedAt]
+          properties:
+            nodeId: { type: string }
+            activatedAt: { type: string, format: date-time }
+
+    NodeSuspendedIn:
+      type: object
+      description: Tolerant copy of the node-topology NodeSuspended envelope; only the fields read are declared.
+      required: [id, type, time, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.logistics.node-topology.node.NodeSuspended }
+        time: { type: string, format: date-time }
+        data:
+          type: object
+          required: [nodeId, suspendedAt]
+          properties:
+            nodeId: { type: string }
+            reason: { type: string }
+            suspendedAt: { type: string, format: date-time }
+
+    NodeRetiredIn:
+      type: object
+      description: Tolerant copy of the node-topology NodeRetired envelope; only the fields read are declared.
+      required: [id, type, time, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.logistics.node-topology.node.NodeRetired }
+        time: { type: string, format: date-time }
+        data:
+          type: object
+          required: [nodeId, retiredAt]
+          properties:
+            nodeId: { type: string }
+            retiredAt: { type: string, format: date-time }

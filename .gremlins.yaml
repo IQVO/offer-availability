@@ -27,5 +27,8 @@ unleash:
     # differs. See HARNESS.md's mutation-testing section for the
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
-    efficacy: "0"
-    mutant-coverage: "0"
+    # Measured 2026-10-23 with gremlins v0.6.0, one run per package under
+    # internal/domain: catalog 14/14, feed 67/67, listing 37/37, nodestatus 15/15,
+    # shared 31/31 killed (efficacy 100%, mutant coverage 100% everywhere).
+    efficacy: "90"
+    mutant-coverage: "90"
