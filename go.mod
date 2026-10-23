@@ -12,6 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/segmentio/kafka-go v0.4.51
 	github.com/testcontainers/testcontainers-go v0.44.0
+	github.com/testcontainers/testcontainers-go/modules/kafka v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 )
 

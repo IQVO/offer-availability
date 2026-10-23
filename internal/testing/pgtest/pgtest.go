@@ -30,6 +30,10 @@ const (
 	templateName = "offer_template"
 )
 
+// Pool is the pgx pool the tests share; the alias lets an integration test file
+// name the type without importing the driver itself.
+type Pool = pgxpool.Pool
+
 var (
 	once      sync.Once
 	container *tcpostgres.PostgresContainer
