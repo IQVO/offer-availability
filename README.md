@@ -2,6 +2,10 @@
 
 Retail network, bounded context **Offer & Availability** (Supporting, commerce tier).
 
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+
 Knows what the network can sell and from which node: the catalogue item, one listing per (catalogue item, node), and the quantity each node currently claims it can ship, with the basis the vendor gave for that number (physical stock or throughput-constrained).
 
 Status: under construction. The design is proposed in
