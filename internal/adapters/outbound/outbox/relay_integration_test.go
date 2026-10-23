@@ -106,8 +106,13 @@ func TestACrashAfterTheSendRepublishesTheSameBytes(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("never sent: %v", err)
 		}
+		if sent == 0 {
+			// The first write to a not-yet-created topic can fail; every failed
+			// try counts as an attempt on the row, so pace the retries.
+			time.Sleep(300 * time.Millisecond)
+		}
 	}
-	relay := outboxrelay.NewOutboxRelay(repo, sink, quiet(), outboxrelay.WithMaxAttempts(5))
+	relay := outboxrelay.NewOutboxRelay(repo, sink, quiet(), outboxrelay.WithMaxAttempts(50))
 	if n, err := relay.RelayOnce(context.Background()); err != nil || n != 1 {
 		t.Fatalf("second pass: %d %v", n, err)
 	}
