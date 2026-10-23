@@ -26,6 +26,7 @@ import (
 type world struct {
 	store *memory.Store
 	deps  usecases.Deps
+	api   *apiRig // the real HTTP router over the same doubles (steps_http_test.go)
 
 	items    map[string]catalog.ID // alias -> catalogItemId
 	listings map[string]listing.ID // "item@node" -> listingId
@@ -369,4 +370,6 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^the outbox holds nothing$`, w.outboxHoldsNothing)
 	sc.Step(`^the last events are "([^"]*)"$`, w.lastEvents)
 	sc.Step(`^the last action raised no events$`, w.lastActionRaisedNothing)
+
+	registerHTTPSteps(sc, w)
 }

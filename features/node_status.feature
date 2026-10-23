@@ -23,6 +23,9 @@ Feature: Listings follow the status of their node
     When node-topology publishes the event "e2" NodeActivated for node "N1" at "2026-10-23T12:00:00Z"
     Then the listing "bottle@N1" is LIVE
     And the listing "mug@N1" is LIVE
+    And the last events are "ListingRestored, ListingRestored"
+    And the last "ListingRestored" event has "ListingID" "lst-2"
+    And the last "ListingRestored" event has "NodeID" "N1"
 
   Scenario: A discontinued listing is never restored
     Given I discontinue the catalogue item "mug"
