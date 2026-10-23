@@ -123,9 +123,8 @@ CREATE TABLE idempotency_keys (
     route            TEXT        NOT NULL,
     key              TEXT        NOT NULL,
     request_hash     TEXT        NOT NULL,
-    status_code      INTEGER,
+    response_status  INTEGER,
     response_body    BYTEA,
-    response_headers JSONB,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (route, key)
 );
