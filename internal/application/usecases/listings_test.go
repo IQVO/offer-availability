@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/claudioed/offer-availability/internal/adapters/outbound/memory"
 	"github.com/claudioed/offer-availability/internal/adapters/outbound/repocontract"
 	"github.com/claudioed/offer-availability/internal/application/ports"
 	"github.com/claudioed/offer-availability/internal/application/usecases"
@@ -107,4 +108,19 @@ func TestCreateListingFailures(t *testing.T) {
 		wantIs(t, err, c.want)
 		e.assertNothingStored(before)
 	}
+}
+
+// malformedIDs mints a listing id the domain refuses.
+type malformedIDs struct{ *memory.SequentialIDs }
+
+func (malformedIDs) NewListingID() listing.ID { return "not a valid id" }
+
+func TestCreateListingRefusesAMalformedGeneratedId(t *testing.T) {
+	e := newEnv(t)
+	e.seedItem("item-1")
+	e.deps.IDs = malformedIDs{&memory.SequentialIDs{}}
+	before := e.store.Counts()
+	_, err := usecases.NewCreateListing(e.deps).Execute(context.Background(), usecases.CreateListingCommand{CatalogItemID: "item-1", NodeID: "node-1"})
+	wantIs(t, err, shared.ErrValidation)
+	e.assertNothingStored(before)
 }

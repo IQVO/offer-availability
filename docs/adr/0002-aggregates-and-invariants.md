@@ -219,3 +219,24 @@ a pure function so the ordering rules (A13) are mutation-tested.
   saves, so a 10000-line feed is one transaction.
 - The unresolved model questions are reported as `model_gaps`: A3, A5, A6, A8,
   A9, A10, A12, A13, A16.
+## Amendment 2026-10-23: assumptions found while building the adapters
+
+- **A21 Instant precision.** Every instant the domain keeps (`asOf`, node status
+  instants, event times) is UTC at microsecond precision (`shared.UTC` truncates).
+  That is what a Postgres `timestamptz` stores, so the instant the domain compared
+  is the instant the database returns, and "newer than" cannot flip across a round
+  trip. Two instants less than a microsecond apart are the same instant.
+- **A22 A FAILED feed survives the Idempotency-Key savepoint.** `POST
+  /inventory-feeds` answers 422 for a FAILED feed, and the middleware drops the
+  writes of a 4xx. The FAILED row is a recorded fact (A11) that `GET
+  /inventory-feeds/{feedId}` must show, so that one handler asks the middleware to
+  commit it (`keepWrites`); every other 4xx still leaves nothing behind. The 422
+  carries the instance `/inventory-feeds/{feedId}`. See ADR 0005.
+- **A23 A node event that can never be applied is dead-lettered.** An event of a
+  consumed type whose payload lacks `nodeId` or its instant, or whose values the
+  use case refuses (`ErrValidation`), goes to `retailnetwork.node-topology.events.dlq`
+  at once; a transient failure is retried five times first. A message that is not a
+  CloudEvent, or a type this service does not consume, is skipped. See ADR 0005.
+- **A24 Zeroing a listing already at 0.** Part of A10, restated because a client
+  can trip over it: a full feed that omits a listing never fed (0, `UNKNOWN`, no
+  `asOf`) leaves it untouched, and `zeroedCount` does not count it.
