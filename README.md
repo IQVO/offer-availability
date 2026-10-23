@@ -62,6 +62,21 @@ go run ./cmd/api                                       # listens on :8080 (HTTP_
 
 All settings, the probes, the shutdown order and the outbox runbook: [docs/runtime.md](docs/runtime.md).
 
+## Deploy it
+
+The Helm chart is [`charts/offer-availability`](charts/offer-availability) (one `api` component). It refuses to render without a database
+source, `kafka.brokers` and `config.nodeTopologyConsumerGroup` (a stable, service-prefixed id, never the pod name). `DATABASE_URL` always comes
+from a Secret.
+
+```sh
+helm install offer-availability charts/offer-availability \
+  --set database.existingSecret=offer-availability-db \
+  --set kafka.brokers=kafka:9092 \
+  --set config.nodeTopologyConsumerGroup=offer-availability-node-topology
+```
+
+Values, grace period and the chart tests: [docs/runtime.md](docs/runtime.md#deployment-helm-chart).
+
 ## Develop
 
 | Command | What it runs |

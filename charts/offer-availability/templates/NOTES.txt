@@ -1,0 +1,26 @@
+{{ .Chart.Name }} has been deployed.
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Service:   {{ include "offer-availability.fullname" . }} ({{ .Values.service.type }}, port {{ .Values.service.port }})
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+Ingress:   http://{{ .host }}{{ (index .paths 0).path }}
+{{- end }}
+{{- else if .Values.gatewayApi.enabled }}
+Gateway API HTTPRoute enabled - routed via the parentRefs/hosts configured
+in gatewayApi.*.
+{{- else }}
+To reach it locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "offer-availability.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/healthz
+{{- end }}
+
+Offer & Availability events are relayed from the transactional outbox onto
+retailnetwork.offer-availability.events ({{ .Values.kafka.brokers }}); Postgres and Kafka are
+the only runtime.
+
+The node-topology consumer is ON:
+  group {{ .Values.config.nodeTopologyConsumerGroup }}, topic retailnetwork.node-topology.events (dead letters on retailnetwork.node-topology.events.dlq)
