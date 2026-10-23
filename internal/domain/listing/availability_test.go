@@ -90,7 +90,8 @@ func TestApplyAvailabilityIsMonotonicPerListing(t *testing.T) {
 	}{
 		{"older", t1.Add(-time.Second), true},
 		{"equal", t1, true},
-		{"one nanosecond later", t1.Add(time.Nanosecond), false},
+		{"one microsecond later", t1.Add(time.Microsecond), false},
+		{"sub-microsecond later is the same instant", t1.Add(time.Nanosecond), true},
 		{"later", t2, false},
 	}
 	for _, c := range cases {

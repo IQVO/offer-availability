@@ -169,6 +169,7 @@ func (l *Listing) ApplyAvailability(qty int, basis Basis, asOf time.Time, feedID
 	if !basis.Valid() || asOf.IsZero() || !shared.ValidID(feedID) {
 		return nil, shared.Invalid("basis, asOf and feedId are required and must be valid")
 	}
+	asOf = shared.UTC(asOf)
 	if qty > MaxQty {
 		return nil, shared.Invalid("availableQty %d is above %d", qty, MaxQty)
 	}

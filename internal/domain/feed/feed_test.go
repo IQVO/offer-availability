@@ -145,7 +145,7 @@ func TestSuperseded(t *testing.T) {
 	}{
 		{"no feed applied yet", t1, time.Time{}, false},
 		{"older than the last applied", t1, t2, true},
-		{"one nanosecond older", t2.Add(-time.Nanosecond), t2, true},
+		{"one microsecond older", t2.Add(-time.Microsecond), t2, true},
 		{"equal to the last applied", t2, t2, false},
 		{"newer", t3, t2, false},
 	}

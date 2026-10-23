@@ -92,13 +92,14 @@ func (v *View) Observe(status Status, at time.Time) (Outcome, error) {
 	if v.status == StatusRetired && status != StatusRetired {
 		return Ignored, nil
 	}
+	at = shared.UTC(at)
 	if at.Before(v.at) {
 		return Ignored, nil
 	}
 	if v.status == status {
 		return Repeated, nil
 	}
-	v.status, v.at = status, shared.UTC(at)
+	v.status, v.at = status, at
 	v.version++
 	return Changed, nil
 }

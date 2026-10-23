@@ -62,7 +62,7 @@ func TestObserveTable(t *testing.T) {
 		{"suspended to retired", StatusSuspended, t0, StatusRetired, t1, Changed, StatusRetired, false, t1},
 		{"same instant is in order", StatusActive, t1, StatusSuspended, t1, Changed, StatusSuspended, false, t1},
 		{"older than the status is ignored", StatusSuspended, t1, StatusActive, t0, Ignored, StatusSuspended, false, t1},
-		{"older by a nanosecond is ignored", StatusActive, t1, StatusSuspended, t1.Add(-time.Nanosecond), Ignored, StatusActive, true, t1},
+		{"older by a microsecond is ignored", StatusActive, t1, StatusSuspended, t1.Add(-time.Microsecond), Ignored, StatusActive, true, t1},
 		{"retired is terminal for activate", StatusRetired, t0, StatusActive, t2, Ignored, StatusRetired, false, t0},
 		{"retired is terminal for suspend", StatusRetired, t0, StatusSuspended, t2, Ignored, StatusRetired, false, t0},
 		{"repeat of active", StatusActive, t0, StatusActive, t1, Repeated, StatusActive, true, t0},

@@ -116,10 +116,12 @@ func ValidTextN(s string, limit int) bool {
 // domain respects (ADR 0002, A7). It is a plain literal on purpose.
 const MaxInt32 = 2147483647
 
-// UTC returns t in UTC, keeping the zero time zero.
+// UTC returns t in UTC at microsecond precision, keeping the zero time zero.
+// Microseconds are what a Postgres timestamptz stores, so an instant the domain
+// compares is the instant the database returns (ADR 0002, A21).
 func UTC(t time.Time) time.Time {
 	if t.IsZero() {
 		return time.Time{}
 	}
-	return t.UTC()
+	return t.UTC().Truncate(time.Microsecond)
 }

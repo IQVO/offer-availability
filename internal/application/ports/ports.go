@@ -13,6 +13,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/claudioed/offer-availability/internal/application/outbox"
 	"github.com/claudioed/offer-availability/internal/application/repository"
 	"github.com/claudioed/offer-availability/internal/domain/catalog"
 	"github.com/claudioed/offer-availability/internal/domain/feed"
@@ -101,6 +102,13 @@ type ProcessedEvents interface {
 // drains the rows to Kafka afterwards. Appending no events is a no-op.
 type EventOutbox interface {
 	Append(ctx context.Context, events ...shared.Event) error
+}
+
+// EventEncoder turns domain events into already-encoded outbox messages: the
+// CloudEvents envelope, the topic, the Kafka key and headers. The CloudEvents id
+// is minted here, once. An event it does not publish is an error.
+type EventEncoder interface {
+	Encode(events ...shared.Event) ([]outbox.Message, error)
 }
 
 // UnitOfWork runs fn as ONE atomic unit: every repository and outbox call fn

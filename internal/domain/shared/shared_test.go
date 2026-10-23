@@ -78,3 +78,11 @@ func TestUTCAndHeader(t *testing.T) {
 		t.Fatal("MaxInt32 must be the Postgres integer ceiling")
 	}
 }
+
+func TestUTCTruncatesToMicroseconds(t *testing.T) {
+	at := time.Date(2026, 10, 22, 9, 0, 0, 123456789, time.UTC)
+	want := time.Date(2026, 10, 22, 9, 0, 0, 123456000, time.UTC)
+	if got := UTC(at); !got.Equal(want) {
+		t.Fatalf("UTC() = %v, want %v (Postgres timestamptz precision)", got, want)
+	}
+}
