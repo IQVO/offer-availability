@@ -308,7 +308,7 @@ tell which repos are behind the template and by how much.
 
 ## Harness² comparison (v4)
 
-Google-Research's Harness² (arXiv:2610.14224, "Recursive Agent Harnessing for an Open World")
+A published research paper's Harness² (arXiv:2610.14224, "Recursive Agent Harnessing for an Open World")
 edits an agent's own harness DURING a task (Propose-Probe-Compose: propose an edit, probe it
 against the same task with no ground truth needed, compose the winner) and keeps a persistent
 "improvement harness" of adopted edits across tasks. This template's v1-v3 harness only ever

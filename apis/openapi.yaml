@@ -1,0 +1,539 @@
+openapi: 3.0.3
+info:
+  title: Offer & Availability API
+  version: 0.1.0
+  contact:
+    name: offer-availability maintainers
+    url: https://github.com/IQVO/offer-availability
+  description: >-
+    REST contract of the offer-availability bounded context of the retail
+    network, derived from retail-network-docs model/model.yaml
+    (contexts[offer-availability].rest, .aggregates, .publishes,
+    conventions.errors) and adjusted by the final cross-context decisions
+    (Gap Register G23 and G24). The context owns the catalogue items, one
+    listing per (catalogue item, node) and the vendor-declared available
+    quantity of each listing with its basis. POST /inventory-feeds is an
+    in-organization call made by vendor-connectivity while it processes a
+    vendor's inventory submission; vendors never call this API directly.
+    Network merchandising calls the catalogue and listing writes; the
+    storefront reads GET /catalog (Open Host Service). No authentication,
+    consistent with the fleet. Errors are RFC 9457 problem details. The shared
+    problem types are not-found (404), illegal-transition (409),
+    concurrent-update (409) and validation-failed (422); the others are this
+    context's invariants, one slug per model Err name.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: Catalog items
+    description: The network's own item master (merchandising writes, aggregate CatalogItem).
+  - name: Catalog
+    description: Storefront catalogue browse (Open Host Service reads).
+  - name: Listings
+    description: One listing per (catalogue item, node) and its availability (aggregate Listing).
+  - name: Inventory feeds
+    description: Vendor inventory feeds for one node, applied in one transaction (aggregate InventoryFeed, in-org call from vendor-connectivity).
+paths:
+  /catalog-items:
+    post:
+      tags: [Catalog items]
+      operationId: createCatalogItem
+      summary: Create a catalogue item (CreateCatalogItem)
+      description: >-
+        Creates an ACTIVE catalogue item under a new catalogItemId and
+        publishes CatalogItemCreated. Dimensions and weight must be positive.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogItemRequest'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '422':
+          description: "invalid-item-dimensions (ErrInvalidItemDimensions), or validation-failed (a malformed title)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /catalog-items/{catalogItemId}:discontinue:
+    post:
+      tags: [Catalog items]
+      operationId: discontinueCatalogItem
+      summary: Discontinue a catalogue item (DiscontinueItem)
+      description: >-
+        Moves the item from ACTIVE to DISCONTINUED, publishes
+        CatalogItemDiscontinued and, in the same transaction, suppresses every
+        LIVE or node-suppressed listing of the item with reason DISCONTINUED
+        (one ListingSuppressed each; Gap Register G24). Discontinuing a
+        DISCONTINUED item returns it unchanged and publishes nothing.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The item, now DISCONTINUED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /catalog:
+    get:
+      tags: [Catalog]
+      operationId: browseCatalog
+      summary: Browse the catalogue (BrowseCatalog)
+      description: >-
+        Open Host Service read. Items ordered by catalogItemId ascending, keyset
+        paginated: pass the previous page's nextCursor as `after`. An empty
+        result is 200 with an empty list.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: One page of catalogue items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogPage'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /catalog/{catalogItemId}:
+    get:
+      tags: [Catalog]
+      operationId: getCatalogItem
+      summary: Get one catalogue item (BrowseCatalog)
+      description: Open Host Service read of one item. An unknown catalogItemId is 404 not-found.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+      responses:
+        '200':
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /listings:
+    post:
+      tags: [Listings]
+      operationId: createListing
+      summary: Create a listing (CreateListing)
+      description: >-
+        Creates the listing of one catalogue item on one node and publishes
+        ListingCreated. The listing starts LIVE when the node is ACTIVE in the
+        local node status view. Otherwise (node proposed, suspended, retired or
+        not yet known) it starts SUPPRESSED with reason NODE_NOT_SELLABLE; for a
+        DISCONTINUED item it starts SUPPRESSED with reason DISCONTINUED (Gap
+        Register G24). Its availability starts at 0, basis UNKNOWN, with no asOf.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListingRequest'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: duplicate-listing (ErrDuplicateListing), or concurrent-update (ErrConcurrentUpdate).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+    get:
+      tags: [Listings]
+      operationId: listListings
+      summary: List listings by node and/or catalogue item
+      description: >-
+        Both filters are optional and combine with AND. Ordered by listingId
+        ascending, keyset paginated like GET /catalog. An empty result is 200
+        with an empty list.
+      parameters:
+        - name: nodeId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: catalogItemId
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/After'
+      responses:
+        '200':
+          description: One page of matching listings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingPage'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /inventory-feeds:
+    post:
+      tags: [Inventory feeds]
+      operationId: applyInventoryFeed
+      summary: Apply an inventory feed for one node (ApplyInventoryFeed)
+      description: >-
+        In-org call from vendor-connectivity. The feed is applied in ONE
+        transaction (at most 10000 lines per node; larger feeds are split by the
+        vendor). Outcomes (Gap Register G23): APPLIED when every line names a
+        listing of the node and no quantity is negative (a line whose asOf is not
+        after the listing's current asOf is skipped and counted as stale, it does
+        not fail the feed; one ListingAvailabilityChanged per applied line and
+        one InventoryFeedApplied); SUPERSEDED when the feed's asOf is older than
+        the last applied feed of that node (nothing applied, no event); FAILED
+        when a line breaks an invariant (listing-not-on-node or
+        negative-availability: nothing applied, no event, the feed row is kept
+        and the request is answered 422). A full feed (fullUpdate true) sets
+        availableQty 0, keeping the basis and stamping the feed's asOf, on every
+        listing of the node it omits. A FAILED feedId may be sent again; an
+        APPLIED or SUPERSEDED feedId is refused with feed-already-applied.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyInventoryFeedRequest'
+      responses:
+        '201':
+          description: The feed, APPLIED or SUPERSEDED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryFeed'
+        '409':
+          description: feed-already-applied (ErrFeedAlreadyApplied), or concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: >-
+            The feed is FAILED, instance /inventory-feeds/{feedId}:
+            listing-not-on-node (ErrListingNotOnNode) or negative-availability
+            (ErrNegativeAvailability). Or validation-failed for a malformed or
+            oversized request (nothing is recorded).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /inventory-feeds/{feedId}:
+    get:
+      tags: [Inventory feeds]
+      operationId: getInventoryFeed
+      summary: Get one inventory feed and its outcome
+      description: The feed with its state, counters and failure code. An unknown feedId is 404 not-found.
+      parameters:
+        - name: feedId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The feed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryFeed'
+        '404':
+          $ref: '#/components/responses/NotFound'
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >-
+        Client-chosen key. A repeat on the same route with the same key and the
+        same request replays the first response; the same key with another body
+        is 422 idempotency-key-reused. Keys are kept for 24 hours.
+      schema:
+        type: string
+        maxLength: 200
+    CatalogItemId:
+      name: catalogItemId
+      in: path
+      required: true
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size, 1 to 500 (default 100).
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+    After:
+      name: after
+      in: query
+      required: false
+      description: Keyset cursor, the nextCursor of the previous page.
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: "not-found (ErrNotFound): an unknown catalogItemId or feedId."
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    ValidationFailed:
+      description: "validation-failed (ErrValidation): a well-formed request that breaks a value rule."
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: >-
+            Problem type slug: the shared not-found, illegal-transition,
+            concurrent-update and validation-failed, or one of this context's
+            (invalid-item-dimensions, negative-availability, stale-availability,
+            node-not-sellable, duplicate-listing, listing-not-on-node,
+            feed-already-applied).
+          example: duplicate-listing
+        title:
+          type: string
+        status:
+          type: integer
+          example: 409
+        detail:
+          type: string
+        instance:
+          type: string
+    CreateCatalogItemRequest:
+      type: object
+      required: [title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        lengthMm:
+          type: integer
+          description: Length in millimetres, 1 to 2147483647.
+        widthMm:
+          type: integer
+          description: Width in millimetres, 1 to 2147483647.
+        heightMm:
+          type: integer
+          description: Height in millimetres, 1 to 2147483647.
+        weightG:
+          type: integer
+          description: Weight in grams, 1 to 2147483647.
+        hazmat:
+          type: boolean
+        fragile:
+          type: boolean
+    CatalogItemState:
+      type: string
+      enum: [ACTIVE, DISCONTINUED]
+    CatalogItem:
+      type: object
+      required: [catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile, state]
+      properties:
+        catalogItemId:
+          type: string
+        title:
+          type: string
+        lengthMm:
+          type: integer
+        widthMm:
+          type: integer
+        heightMm:
+          type: integer
+        weightG:
+          type: integer
+        hazmat:
+          type: boolean
+        fragile:
+          type: boolean
+        state:
+          $ref: '#/components/schemas/CatalogItemState'
+    CatalogPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogItem'
+        nextCursor:
+          type: string
+          description: Present when more items follow; pass it as `after`.
+    CreateListingRequest:
+      type: object
+      required: [catalogItemId, nodeId]
+      properties:
+        catalogItemId:
+          type: string
+        nodeId:
+          type: string
+    Basis:
+      type: string
+      description: Why the node gave the number; kept as the vendor declared it, never re-derived.
+      enum: [PHYSICAL, THROUGHPUT_CONSTRAINED, UNKNOWN]
+    ListingState:
+      type: string
+      enum: [LIVE, SUPPRESSED]
+    SuppressionReason:
+      type: string
+      description: NODE_NOT_SELLABLE while the node is not ACTIVE; DISCONTINUED once the item is discontinued (final).
+      enum: [NODE_NOT_SELLABLE, DISCONTINUED]
+    Availability:
+      type: object
+      required: [availableQty, basis]
+      properties:
+        availableQty:
+          type: integer
+          minimum: 0
+        basis:
+          $ref: '#/components/schemas/Basis'
+        asOf:
+          type: string
+          format: date-time
+          description: Strictly increasing per listing; omitted before the first feed.
+        feedId:
+          type: string
+          description: The feed that carried the number; omitted before the first feed.
+    Listing:
+      type: object
+      required: [listingId, catalogItemId, nodeId, state, availability]
+      properties:
+        listingId:
+          type: string
+        catalogItemId:
+          type: string
+        nodeId:
+          type: string
+        state:
+          $ref: '#/components/schemas/ListingState'
+        suppressionReason:
+          $ref: '#/components/schemas/SuppressionReason'
+        availability:
+          $ref: '#/components/schemas/Availability'
+    ListingPage:
+      type: object
+      required: [listings]
+      properties:
+        listings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Listing'
+        nextCursor:
+          type: string
+          description: Present when more listings follow; pass it as `after`.
+    FeedLine:
+      type: object
+      description: One listing's declared availability. The model names lines but does not define them (ADR 0002, A12).
+      required: [listingId, availableQty, basis]
+      properties:
+        listingId:
+          type: string
+        availableQty:
+          type: integer
+          description: Must be >= 0, else the feed FAILS with negative-availability.
+        basis:
+          $ref: '#/components/schemas/Basis'
+    ApplyInventoryFeedRequest:
+      type: object
+      required: [feedId, nodeId, fullUpdate, asOf, lines]
+      properties:
+        feedId:
+          type: string
+          description: "Chosen by the caller, 1 to 64 characters of A-Z a-z 0-9 . _ : -. An APPLIED or SUPERSEDED feed is never applied twice."
+        nodeId:
+          type: string
+        fullUpdate:
+          type: boolean
+          description: True for a full feed, the complete truth for its node.
+        asOf:
+          type: string
+          format: date-time
+          description: The instant the numbers are true for (feed level, ADR 0002, A12).
+        lines:
+          type: array
+          maxItems: 10000
+          description: At most 10000 lines, at most one per listingId; empty only on a full feed.
+          items:
+            $ref: '#/components/schemas/FeedLine'
+    FeedState:
+      type: string
+      enum: [RECEIVED, APPLIED, FAILED, SUPERSEDED]
+    InventoryFeed:
+      type: object
+      required: [feedId, nodeId, fullUpdate, asOf, state, lineCount, appliedCount, staleCount, zeroedCount]
+      properties:
+        feedId:
+          type: string
+        nodeId:
+          type: string
+        fullUpdate:
+          type: boolean
+        asOf:
+          type: string
+          format: date-time
+        state:
+          $ref: '#/components/schemas/FeedState'
+        lineCount:
+          type: integer
+          description: Lines as received.
+        appliedCount:
+          type: integer
+          description: Lines that replaced a listing's availability.
+        staleCount:
+          type: integer
+          description: Lines skipped because their asOf was not after the listing's asOf.
+        zeroedCount:
+          type: integer
+          description: Listings set to 0 by FullFeedZeroing.
+        receivedAt:
+          type: string
+          format: date-time
+        appliedAt:
+          type: string
+          format: date-time
+          description: When the feed reached APPLIED; omitted otherwise.
+        failureCode:
+          type: string
+          description: The Err identifier of a FAILED feed, for example ErrListingNotOnNode; omitted otherwise.
