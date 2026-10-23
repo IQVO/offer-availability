@@ -14,7 +14,8 @@ package feed
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/claudioed/offer-availability/internal/domain/listing"
@@ -81,16 +82,19 @@ type Submission struct {
 // basis and a quantity not above listing.MaxQty. A negative quantity is NOT
 // rejected here: it fails the feed (ErrNegativeAvailability).
 func NewSubmission(id ID, node listing.NodeID, full bool, asOf time.Time, lines []Line) (Submission, error) {
-	switch {
-	case !id.Valid():
+	if !id.Valid() {
 		return Submission{}, shared.Invalid("feedId %q is not a valid id", id)
-	case !node.Valid():
+	}
+	if !node.Valid() {
 		return Submission{}, shared.Invalid("nodeId %q is not a valid id", node)
-	case asOf.IsZero():
+	}
+	if asOf.IsZero() {
 		return Submission{}, shared.Invalid("asOf is required")
-	case len(lines) > MaxLines:
+	}
+	if len(lines) > MaxLines {
 		return Submission{}, shared.Invalid("a feed has at most %d lines, got %d", MaxLines, len(lines))
-	case len(lines) == 0 && !full:
+	}
+	if len(lines) == 0 && !full {
 		return Submission{}, shared.Invalid("a partial feed needs at least one line")
 	}
 	seen := make(map[listing.ID]struct{}, len(lines))
@@ -107,12 +111,13 @@ func NewSubmission(id ID, node listing.NodeID, full bool, asOf time.Time, lines 
 }
 
 func checkLine(l Line) error {
-	switch {
-	case !l.ListingID.Valid():
+	if !l.ListingID.Valid() {
 		return shared.Invalid("listingId %q is not a valid id", l.ListingID)
-	case !l.Basis.Valid():
+	}
+	if !l.Basis.Valid() {
 		return shared.Invalid("basis %q is unknown", l.Basis)
-	case l.Qty > listing.MaxQty:
+	}
+	if l.Qty > listing.MaxQty {
 		return shared.Invalid("availableQty %d is above %d", l.Qty, listing.MaxQty)
 	}
 	return nil
@@ -274,7 +279,7 @@ func (f *InventoryFeed) zeroOmitted(sub Submission, listings map[listing.ID]*lis
 			omitted = append(omitted, l)
 		}
 	}
-	sort.Slice(omitted, func(i, j int) bool { return omitted[i].ID() < omitted[j].ID() })
+	slices.SortFunc(omitted, func(a, b *listing.Listing) int { return strings.Compare(string(a.ID()), string(b.ID())) })
 	for _, l := range omitted {
 		events, err := l.ZeroOut(sub.AsOf, string(f.id), now)
 		if errors.Is(err, listing.ErrStaleAvailability) {
@@ -359,16 +364,19 @@ func Restore(s Snapshot) (*InventoryFeed, error) {
 }
 
 func checkSnapshot(s Snapshot) error {
-	switch {
-	case !s.ID.Valid() || !s.NodeID.Valid():
+	if !s.ID.Valid() || !s.NodeID.Valid() {
 		return errors.New("feedId and nodeId must be valid ids")
-	case !s.State.Valid():
+	}
+	if !s.State.Valid() {
 		return fmt.Errorf("state %q is unknown", s.State)
-	case s.AsOf.IsZero() || s.ReceivedAt.IsZero():
+	}
+	if s.AsOf.IsZero() || s.ReceivedAt.IsZero() {
 		return errors.New("asOf and receivedAt are required")
-	case s.LineCount < 0 || s.LineCount > MaxLines || (s.LineCount == 0 && !s.FullUpdate):
+	}
+	if s.LineCount < 0 || s.LineCount > MaxLines || (s.LineCount == 0 && !s.FullUpdate) {
 		return errors.New("lineCount is out of range")
-	case s.Version < 1:
+	}
+	if s.Version < 1 {
 		return errors.New("a version of at least 1 is required")
 	}
 	return checkOutcome(s)

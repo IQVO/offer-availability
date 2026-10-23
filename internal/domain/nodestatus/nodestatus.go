@@ -89,12 +89,13 @@ func (v *View) Observe(status Status, at time.Time) (Outcome, error) {
 	if (status != StatusActive && status != StatusSuspended && status != StatusRetired) || at.IsZero() {
 		return Ignored, shared.Invalid("a node observation needs status ACTIVE, SUSPENDED or RETIRED and an instant")
 	}
-	switch {
-	case v.status == StatusRetired && status != StatusRetired:
+	if v.status == StatusRetired && status != StatusRetired {
 		return Ignored, nil
-	case at.Before(v.at):
+	}
+	if at.Before(v.at) {
 		return Ignored, nil
-	case v.status == status:
+	}
+	if v.status == status {
 		return Repeated, nil
 	}
 	v.status, v.at = status, shared.UTC(at)
@@ -114,14 +115,16 @@ func Restore(s Snapshot) (*View, error) {
 }
 
 func checkSnapshot(s Snapshot) error {
-	switch {
-	case !s.ID.Valid():
+	if !s.ID.Valid() {
 		return errors.New("nodeId is malformed")
-	case !s.Status.Valid():
+	}
+	if !s.Status.Valid() {
 		return fmt.Errorf("status %q is unknown", s.Status)
-	case s.StatusAt.IsZero():
+	}
+	if s.StatusAt.IsZero() {
 		return errors.New("statusAt is required")
-	case s.Version < 1:
+	}
+	if s.Version < 1 {
 		return errors.New("a version of at least 1 is required")
 	}
 	return nil

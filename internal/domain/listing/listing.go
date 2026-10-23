@@ -274,12 +274,13 @@ func checkSnapshot(s Snapshot) error {
 }
 
 func checkStateReason(st State, r Reason) error {
-	switch {
-	case !st.Valid():
+	if !st.Valid() {
 		return fmt.Errorf("state %q is unknown", st)
-	case st == StateLive && r != "":
+	}
+	if st == StateLive && r != "" {
 		return errors.New("a LIVE listing has no suppression reason")
-	case st == StateSuppressed && !r.Valid():
+	}
+	if st == StateSuppressed && !r.Valid() {
 		return errors.New("a SUPPRESSED listing needs a valid suppression reason")
 	}
 	return nil

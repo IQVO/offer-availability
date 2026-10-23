@@ -39,7 +39,7 @@ func TestApplyPartialFeed(t *testing.T) {
 	a := newListing(t, "lst-a", "node-1", 1, listing.BasisPhysical, t0)
 	b := newListing(t, "lst-b", "node-1", 2, listing.BasisPhysical, t0)
 	other := newListing(t, "lst-c", "node-1", 3, listing.BasisPhysical, t0)
-	sub := mustSubmission(t, false, t2, line("lst-b", 20, listing.BasisThroughputConstrained), line("lst-a", 10, listing.BasisPhysical))
+	sub := mustSubmission(t, false, t2, line("lst-b", 20, listing.BasisThroughputConstrained), line("lst-a", 0, listing.BasisPhysical))
 	f := receivedFeed(t, sub)
 	res, err := f.Apply(sub, index(a, b, other), t3)
 	if err != nil {
@@ -49,7 +49,7 @@ func TestApplyPartialFeed(t *testing.T) {
 	if ids := changedIDs(res); ids[0] != "lst-b" || ids[1] != "lst-a" {
 		t.Fatalf("changed in line order, got %v", ids)
 	}
-	assertAvailability(t, a, 10, listing.BasisPhysical, t2, "feed-1")
+	assertAvailability(t, a, 0, listing.BasisPhysical, t2, "feed-1")
 	assertAvailability(t, b, 20, listing.BasisThroughputConstrained, t2, "feed-1")
 	assertAvailability(t, other, 3, listing.BasisPhysical, t0, "feed-0")
 	ev, ok := res.Events[0].(listing.ListingAvailabilityChanged)

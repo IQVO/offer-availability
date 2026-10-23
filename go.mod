@@ -5,6 +5,7 @@ go 1.27.3
 require (
 	github.com/arch-go/arch-go v1.7.0
 	github.com/cloudevents/sdk-go/v2 v2.16.2
+	github.com/google/uuid v1.6.0
 	github.com/segmentio/kafka-go v0.4.51
 )
 
