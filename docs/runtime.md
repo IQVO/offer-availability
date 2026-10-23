@@ -72,6 +72,35 @@ Room for the whole sequence: 5 + 10 + 10 s, so a pod needs a termination grace o
   message that is not a CloudEvent, or a type this service does not consume, is
   skipped. Nothing here drains the DLQ topic: that is an operator task.
 
+## Deployment (Helm chart)
+
+`charts/offer-availability` deploys the one binary as a single `api` Deployment with its Service, ConfigMap, ServiceAccount and database
+Secret; the HPA, Ingress and Gateway API HTTPRoute exist but default off. The image is `ghcr.io/iqvo/offer-availability`; an empty `image.tag`
+means `v` + the chart `appVersion`, the tag the `release` job pushes. The pod runs as uid 1000 with a read-only root filesystem, all
+capabilities dropped and the `RuntimeDefault` seccomp profile; `/healthz` backs the startup and liveness probes, `/readyz` the readiness probe.
+
+| Value | Env var | Notes |
+| --- | --- | --- |
+| `database.url` or `database.existingSecret` (+ `existingSecretKey`, default `DATABASE_URL`) | `DATABASE_URL` | Required; always a `secretKeyRef`. |
+| `database.migrationsExistingSecretKey` | `MIGRATIONS_DATABASE_URL` | Optional `secretKeyRef` (`optional: true`); the binary falls back to `DATABASE_URL`. |
+| `kafka.brokers` | `KAFKA_BROKERS` | Required. |
+| `config.nodeTopologyConsumerGroup` | `NODE_TOPOLOGY_CONSUMER_GROUP` | Required, no default; stable and service-prefixed. |
+| `config.httpAddr`, `logLevel`, `outboxRelayInterval`, `outboxMaxAttempts`, `retentionInterval`, `shutdownDrainDelay` | `HTTP_ADDR`, `LOG_LEVEL`, `OUTBOX_RELAY_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `RETENTION_INTERVAL`, `SHUTDOWN_DRAIN_DELAY` | Defaults repeat the binary's; the render test checks they agree. |
+
+The chart fails at render for: no database source, no or blank `kafka.brokers`, an empty `config.nodeTopologyConsumerGroup`, any `*_MODE`
+variable in `extraEnv`, and a `terminationGracePeriodSeconds` below `SHUTDOWN_DRAIN_DELAY` + 25 s (the shutdown budget above is drain delay +
+10 s HTTP + 10 s loops; the default is 60 s, 30 s is the floor at the default 5 s drain). `config.shutdownDrainDelay` must be `0` or a whole
+number of `ms`, `s` or `m` so the chart can add it up.
+
+```sh
+helm lint charts/offer-availability -f charts/offer-availability/ci/default-values.yaml
+bash charts/offer-availability/tests/render_test.sh               # env contract, secrets, hardening, refusals
+python3 charts/offer-availability/tests/test_service_selectors.py # the Service selects exactly one Deployment
+```
+
+CI runs `helm-lint` (`ct lint` plus the selector test) on pull requests and `chart-tests` on every push and PR; the `release` job packages
+`offer-availability-<version>.tgz` and pushes it to `oci://ghcr.io/iqvo`.
+
 ## Tests
 
 `make check` (format, vet, build, lint, unit + handler + BDD tests), `make coverage`

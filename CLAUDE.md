@@ -40,4 +40,4 @@ A feed is ONE transaction across many listings (G23): a stale line is skipped an
 
 ## Workflow
 GitFlow: feature/* -> PR into develop, CI green before merge, never push develop or main. lefthook: pre-commit fmt/vet/lint, pre-push `make check`. Commit and push after each step.
-Open follow-up: the Helm chart (docs/before-first-release.md rows 5-8).
+Deployment: `charts/offer-availability` (one `api` component; refuses to render without a database source, `kafka.brokers`, `config.nodeTopologyConsumerGroup`; tests in `charts/offer-availability/tests`, see docs/runtime.md). Open follow-up: repository secrets (docs/before-first-release.md row 11).
