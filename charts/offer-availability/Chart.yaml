@@ -1,0 +1,12 @@
+apiVersion: v2
+name: offer-availability
+description: Offer & Availability - CatalogItem, Listing and InventoryFeed; publishes their events and keeps a local node status view from node-topology
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/IQVO/offer-availability
+keywords:
+  - ddd
+  - hexagonal-architecture
+  - retail-network
+  - golang

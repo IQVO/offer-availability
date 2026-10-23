@@ -1,0 +1,178 @@
+# Default values for offer-availability. One component: the api Deployment
+# (cmd/api), which also runs the outbox relay, the node-topology consumer and
+# the retention janitor in the same process.
+
+replicaCount: 1
+
+# CI publishes ghcr.io/iqvo/offer-availability:v<release> (and :latest and the
+# short SHA). Empty tag = "v" + the chart's appVersion, which is the tag the
+# release job pushes for the same version.
+image:
+  repository: ghcr.io/iqvo/offer-availability
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# The image runs as uid/gid 1000 (Dockerfile). The service writes nothing to
+# disk, so the root filesystem is read-only.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+  seccompProfile:
+    type: RuntimeDefault
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080   # must match the port of config.httpAddr
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: offer-availability.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Disabled-by-default alternative to ingress: a Gateway API HTTPRoute to the
+# api Service. The parentRefs are supplied by whoever enables it.
+gatewayApi:
+  enabled: false
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: "http"
+  hosts:
+    - path: /
+      pathType: PathPrefix
+  stripPath: true
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# HorizontalPodAutoscaler (autoscaling/v2), off by default. When on, the
+# Deployment omits replicas so the HPA owns them. N>1 is safe for the outbox
+# relay (FOR UPDATE SKIP LOCKED), the version-guarded aggregate writes and the
+# consumer (stable group, inbox dedupe in the same transaction); it has not
+# been load-tested.
+autoscaling:
+  api:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+
+# Environment read by cmd/api (cmd/api/config.go). Every key maps 1:1 to one
+# env var; the defaults repeat the binary's own (tests/render_test.sh checks
+# they agree).
+config:
+  httpAddr: ":8080"                  # HTTP_ADDR
+  logLevel: "info"                   # LOG_LEVEL: debug | info | warn (or warning) | error
+  outboxRelayInterval: "1s"          # OUTBOX_RELAY_INTERVAL: Go duration or plain seconds
+  # OUTBOX_MAX_ATTEMPTS (ADR 0005): how many times one outbox row may fail
+  # before the relay stops claiming it. 0 = unlimited.
+  outboxMaxAttempts: 20
+  retentionInterval: "1h"            # RETENTION_INTERVAL: how often the janitor deletes expired rows
+  # SHUTDOWN_DRAIN_DELAY: wait after /readyz flips before the listener closes.
+  # Whole seconds / minutes / milliseconds only ("5s", "1m", "500ms", "0"):
+  # the chart adds it to the shutdown budget checked against
+  # terminationGracePeriodSeconds.
+  shutdownDrainDelay: "5s"
+  # NODE_TOPOLOGY_CONSUMER_GROUP: the node-topology consumer's STABLE group id
+  # (service-prefixed, never the pod name), so a rescheduled pod resumes from
+  # its committed offsets. REQUIRED: empty = the chart refuses to render and
+  # the binary refuses to boot.
+  nodeTopologyConsumerGroup: ""
+
+# The chart refuses to render unless database.url or database.existingSecret
+# is set. DATABASE_URL always comes from a Secret (secretKeyRef): the one this
+# chart creates from database.url, or the operator's own existingSecret.
+database:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: "DATABASE_URL"
+  # Key, in the same Secret, of a DIRECT (non-pooled, session-mode) connection
+  # string used ONLY for the migration step at startup (golang-migrate takes a
+  # session-scoped advisory lock that transaction pooling cannot honour).
+  # Rendered with `optional: true`: a Secret without the key still starts the
+  # pod and the binary falls back to DATABASE_URL.
+  migrationsExistingSecretKey: "MIGRATIONS_DATABASE_URL"
+
+# Kafka is the only runtime: KAFKA_BROKERS (comma-separated host:port list) is
+# mandatory and the chart refuses to render without it. Produced topic:
+# retailnetwork.offer-availability.events; consumed:
+# retailnetwork.node-topology.events (dead letters on <topic>.dlq).
+kafka:
+  brokers: ""
+
+# Extra env vars appended to the api container as a raw list. The chart
+# refuses any *_MODE variable here: the service has no in-memory, log or
+# permissive mode.
+extraEnv: []
+
+# The Postgres dial and the migrations run at boot; period * threshold gives
+# the pod ~60s before the kubelet gives up. Once the startup probe succeeds,
+# liveness takes over; readiness uses /readyz, which flips to not-ready as the
+# first step of graceful shutdown.
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 2
+  failureThreshold: 30
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+# Shutdown budget of cmd/api/run.go: SHUTDOWN_DRAIN_DELAY (5s) + HTTP drain
+# (10s, shutdownTimeout) + the loops (relay, consumer, janitor are cancelled
+# together and awaited up to 10s, workerDrainTimeout) = 25s. The chart
+# refuses anything under SHUTDOWN_DRAIN_DELAY + 25s (30s by default): a
+# shorter grace period SIGKILLs the loops mid-drain. 60s also covers the
+# worst case of three loops each exhausting its 10s bound one after another.
+terminationGracePeriodSeconds: 60
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
