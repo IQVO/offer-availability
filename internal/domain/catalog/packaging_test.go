@@ -378,3 +378,87 @@ func TestItemGTIN(t *testing.T) {
 		t.Fatalf("restore lost the gtin")
 	}
 }
+
+func TestGrossWeightScalesWithTheChildCount(t *testing.T) {
+	it := newPackItem(t)
+	e := spec(t, gEach, "", 1)
+	e.GrossWeightG = 100
+	mustDeclare(t, it, catalog.PackLevelEach, e)
+	in := spec(t, gInner, gEach, 6)
+	in.GrossWeightG = 600
+	mustDeclare(t, it, catalog.PackLevelInner, in)
+	c := spec(t, gCase, gInner, 24)
+	c.GrossWeightG = 2399 // 4 inner packs of 600 g
+	if _, err := it.DeclarePackLevel(catalog.PackLevelCase, c, packNow); !errors.Is(err, catalog.ErrInvalidPackDimensions) {
+		t.Fatalf("2399 g: %v", err)
+	}
+	c.GrossWeightG = 2400
+	mustDeclare(t, it, catalog.PackLevelCase, c)
+	// a level without a weight is not checked against its contents
+	p := spec(t, gPallet, gCase, 480)
+	mustDeclare(t, it, catalog.PackLevelPallet, p)
+}
+
+func TestFirstDeclaredLevelIsFullyHandled(t *testing.T) {
+	// EACH is declared first (index 0): redeclare, supersede and retire must find it.
+	it := newPackItem(t)
+	mustDeclare(t, it, catalog.PackLevelEach, spec(t, gEach, "", 1))
+	d := spec(t, gEach, "", 1)
+	d.LengthMm, d.WidthMm, d.HeightMm = 5, 5, 5
+	if ev := mustDeclare(t, it, catalog.PackLevelEach, d); len(ev) != 1 {
+		t.Fatalf("in-place update at index 0 raised %d events", len(ev))
+	}
+	if got := it.Packaging()[0]; got.LengthMm != 5 {
+		t.Fatalf("not updated: %+v", got)
+	}
+	if ev := mustDeclare(t, it, catalog.PackLevelEach, spec(t, gSpare, "", 1)); len(ev) != 2 {
+		t.Fatalf("superseding index 0 raised %d events", len(ev))
+	}
+	ev, err := it.RetirePackLevel(catalog.PackLevelEach, packNow)
+	if err != nil || len(ev) != 1 {
+		t.Fatalf("retire the first declared level: %v %v", ev, err)
+	}
+	// only retired history at the level: no change; a level the item never had: not found
+	if ev, err := it.RetirePackLevel(catalog.PackLevelEach, packNow); err != nil || len(ev) != 0 {
+		t.Fatalf("retired history: %v %v", ev, err)
+	}
+	if _, err := it.RetirePackLevel(catalog.PackLevelCase, packNow); !errors.Is(err, catalog.ErrPackLevelNotFound) {
+		t.Fatalf("other levels exist but not this one: %v", err)
+	}
+}
+
+func TestPackBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mod  func(*catalog.PackSpec)
+		ok   bool
+	}{
+		{"max dimension", func(s *catalog.PackSpec) { s.LengthMm, s.WidthMm, s.HeightMm = catalog.MaxDimension, 1, 1 }, true},
+		{"over max dimension", func(s *catalog.PackSpec) { s.LengthMm, s.WidthMm, s.HeightMm = catalog.MaxDimension+1, 1, 1 }, false},
+		{"width over max", func(s *catalog.PackSpec) { s.LengthMm, s.WidthMm, s.HeightMm = 1, catalog.MaxDimension+1, 1 }, false},
+		{"height over max", func(s *catalog.PackSpec) { s.LengthMm, s.WidthMm, s.HeightMm = 1, 1, catalog.MaxDimension+1 }, false},
+		{"max weight", func(s *catalog.PackSpec) { s.GrossWeightG = catalog.MaxDimension }, true},
+		{"over max weight", func(s *catalog.PackSpec) { s.GrossWeightG = catalog.MaxDimension + 1 }, false},
+		{"smallest dims", func(s *catalog.PackSpec) { s.LengthMm, s.WidthMm, s.HeightMm = 1, 1, 1 }, true},
+		{"width missing", func(s *catalog.PackSpec) { s.LengthMm, s.HeightMm = 1, 1 }, false},
+		{"height missing", func(s *catalog.PackSpec) { s.LengthMm, s.WidthMm = 1, 1 }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := spec(t, gEach, "", 1)
+			tc.mod(&s)
+			_, err := newPackItem(t).DeclarePackLevel(catalog.PackLevelEach, s, packNow)
+			if (err == nil) != tc.ok {
+				t.Fatalf("err = %v, want ok=%v", err, tc.ok)
+			}
+		})
+	}
+	// units: exactly the maximum is fine on a multiple, one more is not
+	it := newPackItem(t)
+	mustDeclare(t, it, catalog.PackLevelEach, spec(t, gEach, "", 1))
+	if _, err := it.DeclarePackLevel(catalog.PackLevelPallet, spec(t, gPallet, gEach, catalog.MaxPackQuantity), packNow); err != nil {
+		t.Fatalf("max units: %v", err)
+	}
+	if _, err := it.DeclarePackLevel(catalog.PackLevelCase, spec(t, gCase, gEach, 2), packNow); err != nil {
+		t.Fatalf("two eaches is the smallest case: %v", err)
+	}
+}

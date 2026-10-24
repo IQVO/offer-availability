@@ -220,7 +220,7 @@ func (i *Item) checkChain(l PackLevel, s PackSpec) error {
 	if s.UnitsPerPack%child.UnitsPerPack != 0 || s.UnitsPerPack/child.UnitsPerPack < 2 {
 		return fmt.Errorf("%w: %d eaches is not at least two of the %d-each child %s", ErrInvalidPackQuantity, s.UnitsPerPack, child.UnitsPerPack, child.GTIN)
 	}
-	if child.GrossWeightG > 0 && s.GrossWeightG > 0 {
+	if s.GrossWeightG > 0 {
 		if need := (s.UnitsPerPack / child.UnitsPerPack) * child.GrossWeightG; s.GrossWeightG < need {
 			return fmt.Errorf("%w: %d g is below the %d g of its contents", ErrInvalidPackDimensions, s.GrossWeightG, need)
 		}
