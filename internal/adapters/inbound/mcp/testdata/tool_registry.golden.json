@@ -1,0 +1,328 @@
+[
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Browse the catalogue of sellable items, one keyset page at a time (catalogItemId ascending): each item's title, dimensions in mm (lengthMm, widthMm, heightMm), weightG, its hazmat and fragile flags and its state (ACTIVE, or DISCONTINUED once it was discontinued). Pass the returned nextCursor as after to get the next page; it is absent on the last page. Read-only; a bad limit fails with validation-failed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "description": "the previous page's nextCursor; optional, omitted means the first page",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size, 1..500; optional, omitted or 0 means the default page size (100)",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "name": "browse_catalog",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "catalogItemId": {
+                "type": "string"
+              },
+              "fragile": {
+                "type": "boolean"
+              },
+              "hazmat": {
+                "type": "boolean"
+              },
+              "heightMm": {
+                "type": "integer"
+              },
+              "lengthMm": {
+                "type": "integer"
+              },
+              "state": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "weightG": {
+                "type": "integer"
+              },
+              "widthMm": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "catalogItemId",
+              "title",
+              "lengthMm",
+              "widthMm",
+              "heightMm",
+              "weightG",
+              "hazmat",
+              "fragile",
+              "state"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "nextCursor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one catalogue item by id: title, dimensions in mm (lengthMm, widthMm, heightMm), weightG, the hazmat and fragile flags, and its state (ACTIVE, or DISCONTINUED). Read-only; an unknown id fails with not-found.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogItemId": {
+          "description": "the catalogue item to read, e.g. item-1",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogItemId"
+      ],
+      "type": "object"
+    },
+    "name": "get_catalog_item",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogItemId": {
+          "type": "string"
+        },
+        "fragile": {
+          "type": "boolean"
+        },
+        "hazmat": {
+          "type": "boolean"
+        },
+        "heightMm": {
+          "type": "integer"
+        },
+        "lengthMm": {
+          "type": "integer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "weightG": {
+          "type": "integer"
+        },
+        "widthMm": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "catalogItemId",
+        "title",
+        "lengthMm",
+        "widthMm",
+        "heightMm",
+        "weightG",
+        "hazmat",
+        "fragile",
+        "state"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read one vendor inventory feed and its outcome by id: the node it was sent for (nodeId), whether it was a fullUpdate, its asOf, and its state APPLIED, SUPERSEDED or FAILED with the counters (lineCount, appliedCount, staleCount, zeroedCount), appliedAt, and the failureCode (listing-not-on-node or negative-availability) when it FAILED. Read-only; an unknown id fails with not-found.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "feedId": {
+          "description": "the inventory feed to read, e.g. feed-7",
+          "type": "string"
+        }
+      },
+      "required": [
+        "feedId"
+      ],
+      "type": "object"
+    },
+    "name": "get_inventory_feed",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "appliedAt": {
+          "type": "string"
+        },
+        "appliedCount": {
+          "type": "integer"
+        },
+        "asOf": {
+          "type": "string"
+        },
+        "failureCode": {
+          "type": "string"
+        },
+        "feedId": {
+          "type": "string"
+        },
+        "fullUpdate": {
+          "type": "boolean"
+        },
+        "lineCount": {
+          "type": "integer"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "receivedAt": {
+          "type": "string"
+        },
+        "staleCount": {
+          "type": "integer"
+        },
+        "state": {
+          "type": "string"
+        },
+        "zeroedCount": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "feedId",
+        "nodeId",
+        "fullUpdate",
+        "asOf",
+        "state",
+        "lineCount",
+        "appliedCount",
+        "staleCount",
+        "zeroedCount",
+        "receivedAt"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List which nodes sell what, one keyset page at a time (listingId ascending), optionally narrowed to one node (nodeId) and/or one catalogue item (catalogItemId). Each listing says whether it is LIVE or SUPPRESSED (with the reason: NODE_NOT_SELLABLE or DISCONTINUED) and the availability a vendor's feed last gave it (availableQty, the vendor's basis, asOf and the feedId). Pass the returned nextCursor as after to get the next page. Read-only; a bad limit fails with validation-failed.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "description": "the previous page's nextCursor; optional, omitted means the first page",
+          "type": "string"
+        },
+        "catalogItemId": {
+          "description": "keep only the listings of this catalogue item; optional, omitted means every item",
+          "type": "string"
+        },
+        "limit": {
+          "description": "page size, 1..500; optional, omitted or 0 means the default page size (100)",
+          "type": "integer"
+        },
+        "nodeId": {
+          "description": "keep only the listings of this node; optional, omitted means every node",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "list_listings",
+    "outputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "listings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "availability": {
+                "additionalProperties": false,
+                "properties": {
+                  "asOf": {
+                    "type": "string"
+                  },
+                  "availableQty": {
+                    "type": "integer"
+                  },
+                  "basis": {
+                    "type": "string"
+                  },
+                  "feedId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "availableQty",
+                  "basis"
+                ],
+                "type": "object"
+              },
+              "catalogItemId": {
+                "type": "string"
+              },
+              "listingId": {
+                "type": "string"
+              },
+              "nodeId": {
+                "type": "string"
+              },
+              "state": {
+                "type": "string"
+              },
+              "suppressionReason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "listingId",
+              "catalogItemId",
+              "nodeId",
+              "state",
+              "availability"
+            ],
+            "type": "object"
+          },
+          "type": [
+            "null",
+            "array"
+          ]
+        },
+        "nextCursor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "listings"
+      ],
+      "type": "object"
+    }
+  }
+]
