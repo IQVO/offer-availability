@@ -164,8 +164,11 @@ func (r *CatalogRepo) List(ctx context.Context, page repository.Page) ([]*catalo
 // guarded by the previous version; the pack levels are rewritten with the item
 // (same transaction), and a GTIN another item holds is ErrGtinAlreadyAssigned.
 func (r *CatalogRepo) Save(ctx context.Context, i *catalog.Item) error {
+	return inTx(ctx, r.pool, func(q querier) error { return saveItem(ctx, q, i) })
+}
+
+func saveItem(ctx context.Context, q querier, i *catalog.Item) error {
 	s := i.Snapshot()
-	q := queryFor(ctx, r.pool)
 	if s.Version == 1 {
 		var gtin *string
 		if !s.GTIN.IsZero() {
