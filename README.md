@@ -13,7 +13,7 @@ This repository is a service of the retail network, not of the warehouse-systems
 ## What it does
 
 - **Catalogue**: create a catalogue item (title, dimensions, weight, hazmat, fragile) and discontinue it; discontinuing suppresses every listing of the item.
-- **Identifiers and packaging**: an item may carry a GS1 `identifiers.gtin` and a packaging hierarchy `EACH < INNER < CASE < PALLET` (each level a GTIN with `unitsPerPack` in eaches, a child GTIN chain, optional dimensions and weight). The `unitsPerPack` of a GTIN never changes: a new count is a new GTIN and the old level is retired ([ADR 0006](docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md)).
+- **Identifiers and packaging**: an item may carry a GS1 `identifiers.gtin` and a packaging hierarchy `EACH < INNER < CASE < PALLET` (each level a GTIN with `unitsPerPack` in eaches, a child GTIN chain, optional dimensions and weight). The `unitsPerPack` of a GTIN never changes: a new count is a new GTIN and the old level is retired ([ADR 0007](docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md)).
 - **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE` or `DISCONTINUED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned.
 - **Inventory feeds**: a vendor sends the quantity a node can ship for its listings, with the basis it gave (`PHYSICAL`, `THROUGHPUT_CONSTRAINED`).
   A feed is applied in one transaction; a stale line is skipped and counted, an older feed is `SUPERSEDED`, a broken line makes the feed `FAILED`
@@ -78,6 +78,41 @@ helm install offer-availability charts/offer-availability \
 ```
 
 Values, grace period and the chart tests: [docs/runtime.md](docs/runtime.md#deployment-helm-chart).
+
+## MCP server
+
+A second, read-only binary — `cmd/mcp` — exposes the same reads to agents over
+the [Model Context Protocol](https://modelcontextprotocol.io) ([ADR 0007](docs/adr/0007-mcp-server-adoption.md)):
+Streamable HTTP at `/mcp` (and `/`), an open `/healthz` on `MCP_ADDR` (default `:8090`), no auth (fleet-wide revert), no Kafka, no writes.
+
+| Tool | Mirrors |
+| --- | --- |
+| `browse_catalog(limit?, after?)` | `GET /catalog` |
+| `get_catalog_item(catalogItemId)` | `GET /catalog/{catalogItemId}` |
+| `list_listings(nodeId?, catalogItemId?, limit?, after?)` | `GET /listings` |
+| `get_inventory_feed(feedId)` | `GET /inventory-feeds/{feedId}` |
+
+Errors carry the REST problem slugs (`not-found`, `validation-failed`); the whole advertised tool registry is pinned by a golden file.
+
+```sh
+export DATABASE_URL=postgres://user:***@localhost:5432/offer_availability?sslmode=disable
+go run ./cmd/mcp                                        # listens on :8090 (MCP_ADDR)
+```
+
+In the cluster it is the optional `mcp` chart component (`--set mcp.enabled=true`, plus `mcp.route.enabled` for the Kong route `/api/mcp/offer-availability` → `/mcp`).
+
+## Web console remote
+
+`web/` is the `offer_availability_mfe` Module Federation remote for the warehouse-console
+shell ([ADR 0008](docs/adr/0008-console-remote.md)): read-only screens over the REST reads above — the catalogue (keyset pages), one item
+with its listings, the listings of a node and/or item, and an inventory-feed lookup with its outcome. The API base is resolved at runtime from
+the shell's `/config.json`; the remote is served by its own nginx pod behind the web gateway at `/mfes/offer-availability/` (the chart's optional
+`frontend` component, ClusterIP only).
+
+```sh
+cd web && npm install && npm run dev        # standalone on :4018 (strictPort)
+docker build --build-context uikit=../../warehouse-ui-kit -t warehouse/offer-availability-frontend:local .
+```
 
 ## Develop
 

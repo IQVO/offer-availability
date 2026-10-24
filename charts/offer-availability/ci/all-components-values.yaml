@@ -1,0 +1,31 @@
+# Used by `helm lint` / `ct lint`: every optional value and component set at
+# once (api + mcp + web remote). Kafka and the consumer group are mandatory
+# even with every optional component on: the api always runs.
+database:
+  existingSecret: "offer-availability-db"
+kafka:
+  brokers: "kafka-0.kafka.warehouse-systems.svc.cluster.local:9092,kafka-1.kafka.warehouse-systems.svc.cluster.local:9092"
+config:
+  nodeTopologyConsumerGroup: "offer-availability-node-topology"
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: warehouse-gateway
+      namespace: kong
+      sectionName: http
+  hosts:
+    - path: /api/offer-availability
+      pathType: PathPrefix
+autoscaling:
+  api:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+frontend:
+  enabled: true
