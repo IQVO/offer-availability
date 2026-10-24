@@ -12,6 +12,8 @@ type ListingCreated struct {
 	ListingID     ID
 	CatalogItemID ItemID
 	NodeID        NodeID
+	// OwnerRef is the optional owning seller; empty = operator-owned.
+	OwnerRef OwnerRef
 }
 
 // EventName returns "ListingCreated".
@@ -29,6 +31,7 @@ type ListingAvailabilityChanged struct {
 	ListingID     ID
 	CatalogItemID ItemID
 	NodeID        NodeID
+	OwnerRef      OwnerRef
 	AvailableQty  int
 	Basis         Basis
 	AsOf          time.Time

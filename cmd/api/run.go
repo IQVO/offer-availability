@@ -115,6 +115,8 @@ func buildServer(ad adapters, readiness *inboundhttp.Readiness, logger *slog.Log
 	return &inboundhttp.Server{
 		CreateCatalogItem:  usecases.NewCreateCatalogItem(d),
 		DiscontinueItem:    usecases.NewDiscontinueItem(d),
+		DeclarePackLevel:   usecases.NewDeclarePackLevel(d),
+		RetirePackLevel:    usecases.NewRetirePackLevel(d),
 		BrowseCatalog:      usecases.NewBrowseCatalog(d.Catalog),
 		GetCatalogItem:     usecases.NewGetCatalogItem(d.Catalog),
 		CreateListing:      usecases.NewCreateListing(d),
