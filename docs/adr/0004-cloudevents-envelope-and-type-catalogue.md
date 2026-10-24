@@ -41,6 +41,8 @@ model declares no analytics-only event for this context, so nothing is written t
 ```text
 type: com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated stream: events
 type: com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued stream: events
+type: com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared stream: events
+type: com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired stream: events
 type: com.retailnetwork.commerce.offer-availability.listing.ListingCreated stream: events
 type: com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged stream: events
 type: com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed stream: events
@@ -50,10 +52,12 @@ type: com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedA
 
 | Event | Subject / key | Raised when | `data` |
 |---|---|---|---|
-| `CatalogItemCreated` | `catalogItemId` | CreateCatalogItem is saved (state ACTIVE) | `{catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile}` |
+| `CatalogItemCreated` | `catalogItemId` | CreateCatalogItem is saved (state ACTIVE) | `{catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile, gtin?}` |
 | `CatalogItemDiscontinued` | `catalogItemId` | DiscontinueItem is saved (once; repeating it raises nothing) | `{catalogItemId}` |
-| `ListingCreated` | `listingId` | CreateListing is saved | `{listingId, catalogItemId, nodeId}` |
-| `ListingAvailabilityChanged` | `listingId` | a feed line is applied, or FullFeedZeroing zeroes a listing | `{listingId, catalogItemId, nodeId, availableQty, basis, asOf, feedId}` |
+| `CatalogItemPackagingDeclared` | `catalogItemId` | DeclarePackLevel is saved (ADR 0006; a changed count is a new GTIN) | `{catalogItemId, level, gtin, childGtin?, unitsPerPack, declaredAt}` |
+| `CatalogItemPackLevelRetired` | `catalogItemId` | RetirePackLevel is saved, or a new GTIN supersedes the level | `{catalogItemId, level, gtin, retiredAt}` |
+| `ListingCreated` | `listingId` | CreateListing is saved | `{listingId, catalogItemId, nodeId, ownerRef?}` |
+| `ListingAvailabilityChanged` | `listingId` | a feed line is applied, or FullFeedZeroing zeroes a listing | `{listingId, catalogItemId, nodeId, ownerRef?, availableQty, basis, asOf, feedId}` |
 | `ListingSuppressed` | `listingId` | SuppressListing is saved (node unavailable, creation on a non-sellable node or discontinued item, DiscontinueItem) | `{listingId, nodeId, reason}` |
 | `ListingRestored` | `listingId` | RestoreListing is saved (node activated) | `{listingId, nodeId}` |
 | `InventoryFeedApplied` | `feedId` | ApplyInventoryFeed reaches APPLIED | `{feedId, nodeId, fullUpdate, lineCount, appliedAt}` |

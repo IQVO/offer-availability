@@ -37,6 +37,12 @@ type (
 	listListings interface {
 		Execute(context.Context, usecases.ListListingsQuery) (views.ListingPage, error)
 	}
+	declarePackLevel interface {
+		Execute(context.Context, usecases.DeclarePackLevelCommand) (views.CatalogItem, error)
+	}
+	retirePackLevel interface {
+		Execute(context.Context, catalog.ID, string) (views.CatalogItem, error)
+	}
 	applyInventoryFeed interface {
 		Execute(context.Context, usecases.ApplyInventoryFeedCommand) (views.InventoryFeed, error)
 	}
@@ -49,6 +55,8 @@ type (
 type Server struct {
 	CreateCatalogItem  createCatalogItem
 	DiscontinueItem    discontinueItem
+	DeclarePackLevel   declarePackLevel
+	RetirePackLevel    retirePackLevel
 	BrowseCatalog      browseCatalog
 	GetCatalogItem     getCatalogItem
 	CreateListing      createListing

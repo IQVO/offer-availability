@@ -40,7 +40,7 @@ func newRig(t *testing.T) *rig {
 		Outbox: s.Outbox(), UoW: s.UnitOfWork(), Clock: memory.NewClock(now), IDs: &memory.SequentialIDs{},
 	}
 	srv := &Server{
-		CreateCatalogItem: usecases.NewCreateCatalogItem(d), DiscontinueItem: usecases.NewDiscontinueItem(d),
+		CreateCatalogItem: usecases.NewCreateCatalogItem(d), DiscontinueItem: usecases.NewDiscontinueItem(d), DeclarePackLevel: usecases.NewDeclarePackLevel(d), RetirePackLevel: usecases.NewRetirePackLevel(d),
 		BrowseCatalog: usecases.NewBrowseCatalog(d.Catalog), GetCatalogItem: usecases.NewGetCatalogItem(d.Catalog),
 		CreateListing: usecases.NewCreateListing(d), ListListings: usecases.NewListListings(d.Listings),
 		ApplyInventoryFeed: usecases.NewApplyInventoryFeed(d), GetInventoryFeed: usecases.NewGetInventoryFeed(d.Feeds),

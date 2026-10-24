@@ -18,23 +18,59 @@ type createCatalogItemBody struct {
 	WeightG  int    `json:"weightG"`
 	Hazmat   bool   `json:"hazmat"`
 	Fragile  bool   `json:"fragile"`
+	// Identifiers is optional; identifiers.gtin is validated by the domain.
+	Identifiers *struct {
+		GTIN string `json:"gtin"`
+	} `json:"identifiers"`
 }
 
 func (b createCatalogItemBody) command() usecases.CreateCatalogItemCommand {
-	return usecases.CreateCatalogItemCommand{
+	cmd := usecases.CreateCatalogItemCommand{
 		Title: b.Title, LengthMm: b.LengthMm, WidthMm: b.WidthMm, HeightMm: b.HeightMm,
 		WeightG: b.WeightG, Hazmat: b.Hazmat, Fragile: b.Fragile,
 	}
+	if b.Identifiers != nil {
+		cmd.GTIN = b.Identifiers.GTIN
+	}
+	return cmd
+}
+
+// declarePackLevelBody is the DeclarePackLevelRequest schema (PUT body; the
+// level is in the path).
+type declarePackLevelBody struct {
+	GTIN         string `json:"gtin"`
+	ChildGTIN    string `json:"childGtin"`
+	UnitsPerPack int    `json:"unitsPerPack"`
+	DimsMm       *struct {
+		LengthMm int `json:"lengthMm"`
+		WidthMm  int `json:"widthMm"`
+		HeightMm int `json:"heightMm"`
+	} `json:"dimsMm"`
+	GrossWeightG int `json:"grossWeightG"`
+}
+
+func (b declarePackLevelBody) command(id catalog.ID, level string) usecases.DeclarePackLevelCommand {
+	cmd := usecases.DeclarePackLevelCommand{
+		CatalogItemID: id, Level: level, GTIN: b.GTIN, ChildGTIN: b.ChildGTIN,
+		UnitsPerPack: b.UnitsPerPack, GrossWeightG: b.GrossWeightG,
+	}
+	if b.DimsMm != nil {
+		cmd.LengthMm, cmd.WidthMm, cmd.HeightMm = b.DimsMm.LengthMm, b.DimsMm.WidthMm, b.DimsMm.HeightMm
+	}
+	return cmd
 }
 
 // createListingBody is the CreateListingRequest schema.
 type createListingBody struct {
 	CatalogItemID string `json:"catalogItemId"`
 	NodeID        string `json:"nodeId"`
+	OwnerRef      string `json:"ownerRef"`
 }
 
 func (b createListingBody) command() usecases.CreateListingCommand {
-	return usecases.CreateListingCommand{CatalogItemID: catalog.ID(b.CatalogItemID), NodeID: listing.NodeID(b.NodeID)}
+	return usecases.CreateListingCommand{
+		CatalogItemID: catalog.ID(b.CatalogItemID), NodeID: listing.NodeID(b.NodeID), OwnerRef: listing.OwnerRef(b.OwnerRef),
+	}
 }
 
 // feedLineBody is the FeedLine schema.

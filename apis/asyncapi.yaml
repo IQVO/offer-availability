@@ -26,12 +26,12 @@ info:
     (catalogue item, node) and the quantity each node claims it can ship, with
     the basis the vendor gave (ADR 0001, ADR 0002).
 
-    **Published.** Seven events, all integration events on the topic
+    **Published.** Nine events, all integration events on the topic
     `retailnetwork.offer-availability.events`, through a **transactional
     outbox**: the aggregates and their already-encoded events are written in ONE
     database transaction and an always-on relay drains them to Kafka
     (at-least-once; the CloudEvents `id` is stored with the outbox row, so a
-    retry republishes the same `id`). The seven types are catalogued in ADR 0004.
+    retry republishes the same `id`). The nine types are catalogued in ADR 0004.
     A listing created on a node that is not sellable raises ListingCreated and,
     in the same transaction, ListingSuppressed (ADR 0002, A6), so a consumer
     never has to guess the initial state.
@@ -89,6 +89,10 @@ channels:
         $ref: "#/components/messages/CatalogItemCreated"
       CatalogItemDiscontinued:
         $ref: "#/components/messages/CatalogItemDiscontinued"
+      CatalogItemPackagingDeclared:
+        $ref: "#/components/messages/CatalogItemPackagingDeclared"
+      CatalogItemPackLevelRetired:
+        $ref: "#/components/messages/CatalogItemPackLevelRetired"
       ListingCreated:
         $ref: "#/components/messages/ListingCreated"
       ListingAvailabilityChanged:
@@ -120,7 +124,7 @@ operations:
   publishOfferAvailabilityEvents:
     action: send
     title: Publish offer-availability events
-    summary: Publish the seven offer-availability events through the transactional outbox.
+    summary: Publish the nine offer-availability events through the transactional outbox.
     description: |
       The service sends every event of its three aggregates (CatalogItem,
       Listing, InventoryFeed) to `retailnetwork.offer-availability.events`.
@@ -132,6 +136,8 @@ operations:
     messages:
       - $ref: "#/channels/offerAvailabilityEvents/messages/CatalogItemCreated"
       - $ref: "#/channels/offerAvailabilityEvents/messages/CatalogItemDiscontinued"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/CatalogItemPackagingDeclared"
+      - $ref: "#/channels/offerAvailabilityEvents/messages/CatalogItemPackLevelRetired"
       - $ref: "#/channels/offerAvailabilityEvents/messages/ListingCreated"
       - $ref: "#/channels/offerAvailabilityEvents/messages/ListingAvailabilityChanged"
       - $ref: "#/channels/offerAvailabilityEvents/messages/ListingSuppressed"
@@ -166,7 +172,7 @@ components:
       name: CatalogItemCreated
       title: Catalogue item created
       summary: A catalogue item was created in state ACTIVE.
-      description: "`type` = `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated`; subject and key = the catalogItemId. Raised by CreateCatalogItem. Dimensions are in millimetres and the weight in grams, all positive."
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated`; subject and key = the catalogItemId. Raised by CreateCatalogItem. Dimensions are in millimetres and the weight in grams, all positive. `gtin` is the optional identifiers.gtin (14 digits, GS1 check digit validated) and is omitted when the item has none."
       contentType: application/cloudevents+json
       tags:
         - name: catalogitem
@@ -193,6 +199,65 @@ components:
               weightG: 340
               hazmat: false
               fragile: false
+              gtin: "06141410000120"
+
+    CatalogItemPackagingDeclared:
+      name: CatalogItemPackagingDeclared
+      title: Catalogue item pack level declared
+      summary: A pack level of a catalogue item was declared (or its dimensions changed in place).
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared`; subject and key = the catalogItemId. Raised by DeclarePackLevel (ADR 0006). `unitsPerPack` is in eaches (1 for EACH); `childGtin` names the active lower level and is omitted for EACH. The unitsPerPack of a GTIN never changes: a new count arrives as a new `gtin` at the level, preceded in the same transaction by CatalogItemPackLevelRetired for the old one."
+      contentType: application/cloudevents+json
+      tags:
+        - name: catalogitem
+      payload:
+        $ref: "#/components/schemas/CatalogItemPackagingDeclaredEvent"
+      examples:
+        - name: catalogItemPackagingDeclared
+          summary: An inner pack of six eaches was declared.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a20"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared"
+            subject: "item-004512"
+            time: "2026-10-24T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:CatalogItemPackagingDeclared:v1"
+            data:
+              catalogItemId: "item-004512"
+              level: "INNER"
+              gtin: "06141410000298"
+              childGtin: "06141410000120"
+              unitsPerPack: 6
+              declaredAt: "2026-10-24T09:00:00Z"
+
+    CatalogItemPackLevelRetired:
+      name: CatalogItemPackLevelRetired
+      title: Catalogue item pack level retired
+      summary: The active pack level of a catalogue item was retired.
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired`; subject and key = the catalogItemId. Raised by RetirePackLevel, or by DeclarePackLevel when a new GTIN supersedes the level (then it precedes the CatalogItemPackagingDeclared of the new GTIN). The retired GTIN stays resolvable and is never reused."
+      contentType: application/cloudevents+json
+      tags:
+        - name: catalogitem
+      payload:
+        $ref: "#/components/schemas/CatalogItemPackLevelRetiredEvent"
+      examples:
+        - name: catalogItemPackLevelRetired
+          summary: The case level was retired.
+          payload:
+            specversion: "1.0"
+            id: "7c1d3a52-5f0e-4a61-9a37-2b9d4e1f6a21"
+            source: "/retailnetwork/offer-availability"
+            type: "com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired"
+            subject: "item-004512"
+            time: "2026-10-24T10:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:offer-availability:events:CatalogItemPackLevelRetired:v1"
+            data:
+              catalogItemId: "item-004512"
+              level: "CASE"
+              gtin: "06141410000366"
+              retiredAt: "2026-10-24T10:00:00Z"
 
     CatalogItemDiscontinued:
       name: CatalogItemDiscontinued
@@ -504,6 +569,42 @@ components:
                 weightG: { type: integer, minimum: 1 }
                 hazmat: { type: boolean }
                 fragile: { type: boolean }
+                gtin: { type: string, pattern: "^[0-9]{14}$", description: The optional identifiers.gtin, normalised to 14 digits; omitted when the item has none. }
+
+    CatalogItemPackagingDeclaredEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [catalogItemId, level, gtin, unitsPerPack, declaredAt]
+              properties:
+                catalogItemId: { type: string }
+                level: { $ref: "#/components/schemas/PackLevel" }
+                gtin: { type: string, pattern: "^[0-9]{14}$" }
+                childGtin: { type: string, pattern: "^[0-9]{14}$", description: The GTIN of the active lower level; omitted for EACH. }
+                unitsPerPack: { type: integer, minimum: 1, maximum: 1000000, description: Eaches in one pack; 1 for EACH. }
+                declaredAt: { type: string, format: date-time }
+
+    CatalogItemPackLevelRetiredEvent:
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            data:
+              type: object
+              required: [catalogItemId, level, gtin, retiredAt]
+              properties:
+                catalogItemId: { type: string }
+                level: { $ref: "#/components/schemas/PackLevel" }
+                gtin: { type: string, pattern: "^[0-9]{14}$" }
+                retiredAt: { type: string, format: date-time }
+
+    PackLevel:
+      type: string
+      enum: [EACH, INNER, CASE, PALLET]
+      description: Packaging level, lowest first.
 
     CatalogItemDiscontinuedEvent:
       allOf:
@@ -528,6 +629,7 @@ components:
                 listingId: { type: string }
                 catalogItemId: { type: string }
                 nodeId: { type: string }
+                ownerRef: { type: string, description: The owning seller (sellerId); omitted for an operator-owned listing. }
 
     ListingAvailabilityChangedEvent:
       allOf:
@@ -541,6 +643,7 @@ components:
                 listingId: { type: string }
                 catalogItemId: { type: string }
                 nodeId: { type: string }
+                ownerRef: { type: string, description: The owning seller (sellerId); omitted for an operator-owned listing. }
                 availableQty: { type: integer, minimum: 0 }
                 basis: { $ref: "#/components/schemas/Basis" }
                 asOf: { type: string, format: date-time, description: The instant the number is true for; strictly increasing per listing. }

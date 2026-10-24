@@ -12,6 +12,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
+	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
 
 // checkVersion applies the optimistic-concurrency rule of the ports package: a
@@ -50,7 +51,35 @@ func (r *CatalogRepository) Get(ctx context.Context, id catalog.ID) (*catalog.It
 	if !ok {
 		return nil, ports.ErrNotFound
 	}
-	return catalog.Restore(snap)
+	return catalog.RestorePackaged(snap, r.s.packs[id])
+}
+
+// FindByGTIN returns the id of the item whose own GTIN or pack level GTIN is
+// gtin, or ports.ErrNotFound.
+func (r *CatalogRepository) FindByGTIN(ctx context.Context, gtin gs1.GTIN) (catalog.ID, error) {
+	defer r.s.enter(ctx)()
+	if id, ok := r.ownerOf(gtin, ""); ok {
+		return id, nil
+	}
+	return "", ports.ErrNotFound
+}
+
+// ownerOf finds the item (other than except) that holds gtin.
+func (r *CatalogRepository) ownerOf(gtin gs1.GTIN, except catalog.ID) (catalog.ID, bool) {
+	for _, id := range sortedKeys(r.s.items) {
+		if id == except {
+			continue
+		}
+		if r.s.items[id].GTIN == gtin {
+			return id, true
+		}
+		for _, d := range r.s.packs[id] {
+			if d.GTIN == gtin {
+				return id, true
+			}
+		}
+	}
+	return "", false
 }
 
 // List returns the items of the page by id ascending.
@@ -61,7 +90,7 @@ func (r *CatalogRepository) List(ctx context.Context, page repository.Page) ([]*
 		if string(id) <= page.After || len(out) >= page.Limit {
 			continue
 		}
-		it, err := catalog.Restore(r.s.items[id])
+		it, err := catalog.RestorePackaged(r.s.items[id], r.s.packs[id])
 		if err != nil {
 			return nil, err
 		}
@@ -78,8 +107,26 @@ func (r *CatalogRepository) Save(ctx context.Context, i *catalog.Item) error {
 	if err := checkVersion(stored.Version, exists, snap.Version); err != nil {
 		return err
 	}
+	for _, g := range gtinsOf(snap, i.PackLevels()) {
+		if _, taken := r.ownerOf(g, snap.ID); taken {
+			return catalog.ErrGtinAlreadyAssigned
+		}
+	}
 	r.s.items[snap.ID] = snap
+	r.s.packs[snap.ID] = i.PackLevels()
 	return nil
+}
+
+// gtinsOf lists every GTIN an item holds.
+func gtinsOf(snap catalog.Snapshot, defs []catalog.PackLevelDef) []gs1.GTIN {
+	var out []gs1.GTIN
+	if !snap.GTIN.IsZero() {
+		out = append(out, snap.GTIN)
+	}
+	for _, d := range defs {
+		out = append(out, d.GTIN)
+	}
+	return out
 }
 
 // ListingRepository is the in-memory ports.ListingRepository.
@@ -97,9 +144,14 @@ func (r *ListingRepository) Get(ctx context.Context, id listing.ID) (*listing.Li
 
 // FindByItemAndNode returns the listing of the pair, or ports.ErrNotFound.
 func (r *ListingRepository) FindByItemAndNode(ctx context.Context, item listing.ItemID, node listing.NodeID) (*listing.Listing, error) {
+	return r.FindByItemNodeOwner(ctx, item, node, "")
+}
+
+// FindByItemNodeOwner returns the listing of the triple, or ports.ErrNotFound.
+func (r *ListingRepository) FindByItemNodeOwner(ctx context.Context, item listing.ItemID, node listing.NodeID, owner listing.OwnerRef) (*listing.Listing, error) {
 	defer r.s.enter(ctx)()
 	for _, id := range sortedKeys(r.s.listings) {
-		if snap := r.s.listings[id]; snap.ItemID == item && snap.NodeID == node {
+		if snap := r.s.listings[id]; snap.ItemID == item && snap.NodeID == node && snap.OwnerRef == owner {
 			return listing.Restore(snap)
 		}
 	}
@@ -189,7 +241,7 @@ func (r *ListingRepository) save(l *listing.Listing) error {
 	}
 	if !exists {
 		for id, other := range r.s.listings {
-			if id != snap.ID && other.ItemID == snap.ItemID && other.NodeID == snap.NodeID {
+			if id != snap.ID && other.ItemID == snap.ItemID && other.NodeID == snap.NodeID && other.OwnerRef == snap.OwnerRef {
 				return listing.ErrDuplicateListing
 			}
 		}

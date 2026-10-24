@@ -19,6 +19,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
+	"github.com/claudioed/offer-availability/internal/domain/shared"
 )
 
 // world is the state of one scenario: the memory doubles behind the real use
@@ -65,6 +66,14 @@ var errorNames = map[string]error{
 	"ErrFeedAlreadyApplied":    feed.ErrFeedAlreadyApplied,
 	"ErrListingNotOnNode":      feed.ErrListingNotOnNode,
 	"ErrNegativeAvailability":  listing.ErrNegativeAvailability,
+	"ErrInvalidGTIN":           catalog.ErrInvalidGTIN,
+	"ErrGtinAlreadyAssigned":   catalog.ErrGtinAlreadyAssigned,
+	"ErrPackQuantityImmutable": catalog.ErrPackQuantityImmutable,
+	"ErrPackLevelOrder":        catalog.ErrPackLevelOrder,
+	"ErrInvalidPackQuantity":   catalog.ErrInvalidPackQuantity,
+	"ErrPackLevelNotFound":     catalog.ErrPackLevelNotFound,
+	"ErrIllegalTransition":     shared.ErrIllegalTransition,
+	"ErrValidation":            shared.ErrValidation,
 }
 
 func (w *world) listingID(alias string) (listing.ID, error) {
@@ -372,4 +381,5 @@ func initializeScenario(sc *godog.ScenarioContext) {
 	sc.Step(`^the last action raised no events$`, w.lastActionRaisedNothing)
 
 	registerHTTPSteps(sc, w)
+	registerPackagingSteps(sc, w)
 }

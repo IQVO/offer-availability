@@ -14,6 +14,8 @@ import (
 type CreateListingCommand struct {
 	CatalogItemID catalog.ID
 	NodeID        listing.NodeID
+	// OwnerRef is the optional seller that owns the stock; "" = operator-owned.
+	OwnerRef listing.OwnerRef
 }
 
 // CreateListing creates the listing of one catalogue item on one node.
@@ -31,14 +33,16 @@ func (uc *CreateListing) Execute(ctx context.Context, cmd CreateListingCommand) 
 	if !cmd.CatalogItemID.Valid() || !cmd.NodeID.Valid() {
 		return views.Listing{}, shared.Invalid("catalogItemId and nodeId must be valid ids")
 	}
+	if !cmd.OwnerRef.Valid() {
+		return views.Listing{}, shared.Invalid("ownerRef must be a valid id")
+	}
 	return transact(ctx, uc.UoW, func(ctx context.Context) (views.Listing, error) {
 		item, err := uc.Catalog.Get(ctx, cmd.CatalogItemID)
 		if err != nil {
 			return views.Listing{}, err
 		}
 		itemID := listing.ItemID(cmd.CatalogItemID)
-		_, err = uc.Listings.FindByItemAndNode(ctx, itemID, cmd.NodeID)
-		taken, err := found(err)
+		taken, err := uc.pairTaken(ctx, itemID, cmd.NodeID, cmd.OwnerRef)
 		if err != nil {
 			return views.Listing{}, err
 		}
@@ -49,7 +53,7 @@ func (uc *CreateListing) Execute(ctx context.Context, cmd CreateListingCommand) 
 		if err != nil {
 			return views.Listing{}, err
 		}
-		l, events, err := listing.Create(uc.IDs.NewListingID(), itemID, cmd.NodeID,
+		l, events, err := listing.CreateOwned(uc.IDs.NewListingID(), itemID, cmd.NodeID, cmd.OwnerRef,
 			listing.Sellability{NodeActive: active, ItemDiscontinued: item.Discontinued()}, uc.now())
 		if err != nil {
 			return views.Listing{}, err
@@ -62,6 +66,18 @@ func (uc *CreateListing) Execute(ctx context.Context, cmd CreateListingCommand) 
 		}
 		return views.ListingFrom(l), nil
 	})
+}
+
+// pairTaken reports whether a listing of (item, node, owner) exists: the
+// operator-owned pair for an empty owner, the seller's own otherwise.
+func (uc *CreateListing) pairTaken(ctx context.Context, item listing.ItemID, node listing.NodeID, owner listing.OwnerRef) (bool, error) {
+	var err error
+	if owner == "" {
+		_, err = uc.Listings.FindByItemAndNode(ctx, item, node)
+	} else {
+		_, err = uc.Listings.FindByItemNodeOwner(ctx, item, node, owner)
+	}
+	return found(err)
 }
 
 // nodeActive reports whether the local view says the node is ACTIVE.

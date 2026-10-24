@@ -74,6 +74,15 @@ var problemCatalogue = []struct {
 	{ports.ErrNotFound, problem{http.StatusNotFound, "not-found", "Resource not found"}},
 	{shared.ErrIllegalTransition, problem{http.StatusConflict, "illegal-transition", "Illegal transition"}},
 	{ports.ErrConcurrentUpdate, problem{http.StatusConflict, "concurrent-update", "The resource was modified by another request; re-fetch it and retry"}},
+	// CatalogItem identifiers and packaging (ADR 0006).
+	{catalog.ErrInvalidGTIN, problem{http.StatusUnprocessableEntity, "invalid-gtin", "The GTIN is malformed or its check digit is wrong"}},
+	{catalog.ErrGtinAlreadyAssigned, problem{http.StatusConflict, "gtin-already-assigned", "The GTIN already identifies an item or a pack level"}},
+	{catalog.ErrPackQuantityImmutable, problem{http.StatusConflict, "pack-quantity-immutable", "The unitsPerPack of an active pack level cannot change; declare a new GTIN"}},
+	{catalog.ErrPackLevelOrder, problem{http.StatusUnprocessableEntity, "pack-level-order", "A pack level needs an active child level that is lower than it"}},
+	{catalog.ErrInvalidPackQuantity, problem{http.StatusUnprocessableEntity, "invalid-pack-quantity", "The unitsPerPack is out of range or disagrees with the child chain"}},
+	{catalog.ErrInvalidPackDimensions, problem{http.StatusUnprocessableEntity, "invalid-pack-dimensions", "The pack dimensions or gross weight are invalid"}},
+	{catalog.ErrInvalidPackLevel, problem{http.StatusUnprocessableEntity, "invalid-pack-level", "The pack level must be EACH, INNER, CASE or PALLET"}},
+	{catalog.ErrPackLevelNotFound, problem{http.StatusNotFound, "pack-level-not-found", "The item has no such pack level"}},
 	// CatalogItem.
 	{catalog.ErrInvalidItemDimensions, problem{http.StatusUnprocessableEntity, "invalid-item-dimensions", "Dimensions and weight must be positive"}},
 	// Listing.

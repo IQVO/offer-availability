@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/claudioed/offer-availability/internal/domain/shared"
+	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
 
 // ErrInvalidItemDimensions: dimensions and weight are positive (422).
@@ -53,14 +54,18 @@ type Spec struct {
 	WeightG  int
 	Hazmat   bool
 	Fragile  bool
+	// GTIN is the optional identifiers.gtin (zero = absent), already parsed.
+	GTIN gs1.GTIN
 }
 
 // Item is the aggregate root.
 type Item struct {
-	id      ID
-	spec    Spec
-	state   State
-	version int64
+	id        ID
+	spec      Spec
+	state     State
+	version   int64
+	gtin      gs1.GTIN
+	packaging []PackLevelDef
 }
 
 // Snapshot is the persisted form of an item. Restore validates it.
@@ -75,6 +80,7 @@ type Snapshot struct {
 	Fragile  bool
 	State    State
 	Version  int64
+	GTIN     gs1.GTIN
 }
 
 // Create builds an ACTIVE item (aggregate version 1) and raises
@@ -86,12 +92,12 @@ func Create(id ID, spec Spec, now time.Time) (*Item, []shared.Event, error) {
 	if err := checkSpec(spec); err != nil {
 		return nil, nil, err
 	}
-	it := &Item{id: id, spec: spec, state: StateActive, version: 1}
+	it := &Item{id: id, spec: spec, state: StateActive, version: 1, gtin: spec.GTIN}
 	ev := CatalogItemCreated{
 		Header:        shared.Header{Version: it.version, At: shared.UTC(now)},
 		CatalogItemID: id, Title: spec.Title,
 		LengthMm: spec.LengthMm, WidthMm: spec.WidthMm, HeightMm: spec.HeightMm, WeightG: spec.WeightG,
-		Hazmat: spec.Hazmat, Fragile: spec.Fragile,
+		Hazmat: spec.Hazmat, Fragile: spec.Fragile, GTIN: spec.GTIN,
 	}
 	return it, []shared.Event{ev}, nil
 }
@@ -126,13 +132,25 @@ func (i *Item) Discontinue(now time.Time) []shared.Event {
 	}}
 }
 
-// Restore rebuilds a persisted item, validating every invariant.
-func Restore(s Snapshot) (*Item, error) {
+// Restore rebuilds a persisted item that has no pack levels.
+func Restore(s Snapshot) (*Item, error) { return RestorePackaged(s, nil) }
+
+// PackLevels returns every pack level ever declared, retired ones included, in
+// declaration order: the persisted form of the packaging (the Snapshot stays a
+// comparable value).
+func (i *Item) PackLevels() []PackLevelDef { return append([]PackLevelDef(nil), i.packaging...) }
+
+// RestorePackaged rebuilds a persisted item with its pack levels, validating
+// every invariant.
+func RestorePackaged(s Snapshot, defs []PackLevelDef) (*Item, error) {
 	if err := checkSnapshot(s); err != nil {
 		return nil, shared.Corrupt("catalogue item %q: %v", s.ID, err)
 	}
+	if err := checkPackSnapshot(defs); err != nil {
+		return nil, shared.Corrupt("catalogue item %q: %v", s.ID, err)
+	}
 	return &Item{
-		id: s.ID, state: s.State, version: s.Version,
+		id: s.ID, state: s.State, version: s.Version, gtin: s.GTIN, packaging: append([]PackLevelDef(nil), defs...),
 		spec: Spec{
 			Title: s.Title, LengthMm: s.LengthMm, WidthMm: s.WidthMm, HeightMm: s.HeightMm, WeightG: s.WeightG,
 			Hazmat: s.Hazmat, Fragile: s.Fragile,
@@ -178,6 +196,6 @@ func (i *Item) Snapshot() Snapshot {
 	return Snapshot{
 		ID: i.id, Title: i.spec.Title, LengthMm: i.spec.LengthMm, WidthMm: i.spec.WidthMm,
 		HeightMm: i.spec.HeightMm, WeightG: i.spec.WeightG, Hazmat: i.spec.Hazmat, Fragile: i.spec.Fragile,
-		State: i.state, Version: i.version,
+		State: i.state, Version: i.version, GTIN: i.gtin,
 	}
 }
