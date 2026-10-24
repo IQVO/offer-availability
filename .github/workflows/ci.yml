@@ -323,7 +323,7 @@ jobs:
   # ============================================================
   # CLASSIFICATION: LINTERS & STATIC ANALYSIS (web MFE remote)
   # ============================================================
-  # The web/ Module Federation remote (ADR 0007): lint, typecheck, unit
+  # The web/ Module Federation remote (ADR 0008): lint, typecheck, unit
   # tests and a production build. @warehouse/ui-kit is a sibling repo
   # consumed as file:../../warehouse-ui-kit, so it is checked out beside
   # this repo and built first (its dist is what the file: dependency

@@ -55,7 +55,7 @@ function AvailabilityLayout() {
  *  prefix (in the shell) or at / (standalone dev, see main.tsx). It calls
  *  ONLY this context's own API (/api/offer-availability), and it READS only:
  *  creating items and listings and applying feeds are API/vendor operations,
- *  not console ones (ADR 0007).
+ *  not console ones (ADR 0008).
  *
  *   - (index): redirects to the catalogue.
  *   - catalog: the catalogue, one keyset page at a time.

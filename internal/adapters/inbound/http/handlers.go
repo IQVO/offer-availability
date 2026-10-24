@@ -17,6 +17,8 @@ import (
 func (s *Server) mountCatalog(r chi.Router) {
 	s.keyed(r, http.MethodPost, "/catalog-items", s.createCatalogItem)
 	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}:discontinue", s.discontinueCatalogItem)
+	s.keyed(r, http.MethodPut, "/catalog-items/{catalogItemId}/packaging/{level}", s.declarePackLevel)
+	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}/packaging/{level}:retire", s.retirePackLevel)
 	r.Get("/catalog", s.browseCatalog)
 	r.Get("/catalog/{catalogItemId}", s.getCatalogItem)
 }
@@ -52,6 +54,32 @@ func (s *Server) createCatalogItem(w http.ResponseWriter, r *http.Request) {
 // takes no body.
 func (s *Server) discontinueCatalogItem(w http.ResponseWriter, r *http.Request) {
 	item, err := s.DiscontinueItem.Execute(r.Context(), itemID(r))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// declarePackLevel is PUT /catalog-items/{catalogItemId}/packaging/{level}.
+func (s *Server) declarePackLevel(w http.ResponseWriter, r *http.Request) {
+	var body declarePackLevelBody
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	item, err := s.DeclarePackLevel.Execute(r.Context(), body.command(itemID(r), chi.URLParam(r, "level")))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+// retirePackLevel is POST /catalog-items/{catalogItemId}/packaging/{level}:retire,
+// which takes no body.
+func (s *Server) retirePackLevel(w http.ResponseWriter, r *http.Request) {
+	item, err := s.RetirePackLevel.Execute(r.Context(), itemID(r), chi.URLParam(r, "level"))
 	if err != nil {
 		writeError(w, r, err)
 		return

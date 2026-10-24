@@ -177,7 +177,7 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
-# The read-only MCP server (ADR 0006): cmd/mcp over Streamable HTTP, its own
+# The read-only MCP server (ADR 0007): cmd/mcp over Streamable HTTP, its own
 # Deployment + ClusterIP Service beside the api. It reads the same Postgres
 # (DATABASE_URL from the same Secret), never dials Kafka, never starts the
 # relay, the consumer or the janitor, and has no auth (fleet-wide revert).
@@ -212,7 +212,7 @@ mcp:
 # own nginx pod, reached through warehouse-infra's Nginx web gateway at
 # /mfes/offer-availability/. Never routed by this chart; ClusterIP only.
 # The Deployment renders NO env: nothing about the remote is configured in
-# the cluster (ADR 0007).
+# the cluster (ADR 0008).
 frontend:
   enabled: false
   replicaCount: 1

@@ -22,7 +22,7 @@ var update = flag.Bool("update", false, "rewrite the MCP tool registry golden fi
 var wantTools = []string{"browse_catalog", "get_catalog_item", "get_inventory_feed", "list_listings"}
 
 // maxTools is the tool budget. Raising it is a deliberate, reviewed act (an
-// ADR 0006 amendment): TestToolSurface still pins the exact curated set.
+// ADR 0007 amendment): TestToolSurface still pins the exact curated set.
 const maxTools = 4
 
 // writeVerbs are the verbs of this service's write use cases (create a

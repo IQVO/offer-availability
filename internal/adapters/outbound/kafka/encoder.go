@@ -36,6 +36,23 @@ type catalogItemCreatedData struct {
 	WeightG       int    `json:"weightG"`
 	Hazmat        bool   `json:"hazmat"`
 	Fragile       bool   `json:"fragile"`
+	GTIN          string `json:"gtin,omitempty"`
+}
+
+type catalogItemPackagingDeclaredData struct {
+	CatalogItemID string `json:"catalogItemId"`
+	Level         string `json:"level"`
+	GTIN          string `json:"gtin"`
+	ChildGTIN     string `json:"childGtin,omitempty"`
+	UnitsPerPack  int    `json:"unitsPerPack"`
+	DeclaredAt    string `json:"declaredAt"`
+}
+
+type catalogItemPackLevelRetiredData struct {
+	CatalogItemID string `json:"catalogItemId"`
+	Level         string `json:"level"`
+	GTIN          string `json:"gtin"`
+	RetiredAt     string `json:"retiredAt"`
 }
 
 type catalogItemDiscontinuedData struct {
@@ -46,12 +63,14 @@ type listingCreatedData struct {
 	ListingID     string `json:"listingId"`
 	CatalogItemID string `json:"catalogItemId"`
 	NodeID        string `json:"nodeId"`
+	OwnerRef      string `json:"ownerRef,omitempty"`
 }
 
 type listingAvailabilityChangedData struct {
 	ListingID     string `json:"listingId"`
 	CatalogItemID string `json:"catalogItemId"`
 	NodeID        string `json:"nodeId"`
+	OwnerRef      string `json:"ownerRef,omitempty"`
 	AvailableQty  int    `json:"availableQty"`
 	Basis         string `json:"basis"`
 	AsOf          string `json:"asOf"`
@@ -144,15 +163,24 @@ func payloadFor(ev shared.Event) (any, error) {
 	case catalog.CatalogItemCreated:
 		return catalogItemCreatedData{
 			CatalogItemID: string(e.CatalogItemID), Title: e.Title, LengthMm: e.LengthMm, WidthMm: e.WidthMm,
-			HeightMm: e.HeightMm, WeightG: e.WeightG, Hazmat: e.Hazmat, Fragile: e.Fragile,
+			HeightMm: e.HeightMm, WeightG: e.WeightG, Hazmat: e.Hazmat, Fragile: e.Fragile, GTIN: e.GTIN.String(),
+		}, nil
+	case catalog.CatalogItemPackagingDeclared:
+		return catalogItemPackagingDeclaredData{
+			CatalogItemID: string(e.CatalogItemID), Level: string(e.Level), GTIN: e.GTIN.String(),
+			ChildGTIN: e.ChildGTIN.String(), UnitsPerPack: e.UnitsPerPack, DeclaredAt: ts(e.DeclaredAt),
+		}, nil
+	case catalog.CatalogItemPackLevelRetired:
+		return catalogItemPackLevelRetiredData{
+			CatalogItemID: string(e.CatalogItemID), Level: string(e.Level), GTIN: e.GTIN.String(), RetiredAt: ts(e.RetiredAt),
 		}, nil
 	case catalog.CatalogItemDiscontinued:
 		return catalogItemDiscontinuedData{CatalogItemID: string(e.CatalogItemID)}, nil
 	case listing.ListingCreated:
-		return listingCreatedData{ListingID: string(e.ListingID), CatalogItemID: string(e.CatalogItemID), NodeID: string(e.NodeID)}, nil
+		return listingCreatedData{ListingID: string(e.ListingID), CatalogItemID: string(e.CatalogItemID), NodeID: string(e.NodeID), OwnerRef: string(e.OwnerRef)}, nil
 	case listing.ListingAvailabilityChanged:
 		return listingAvailabilityChangedData{
-			ListingID: string(e.ListingID), CatalogItemID: string(e.CatalogItemID), NodeID: string(e.NodeID),
+			ListingID: string(e.ListingID), CatalogItemID: string(e.CatalogItemID), NodeID: string(e.NodeID), OwnerRef: string(e.OwnerRef),
 			AvailableQty: e.AvailableQty, Basis: string(e.Basis), AsOf: ts(e.AsOf), FeedID: e.FeedID,
 		}, nil
 	case listing.ListingSuppressed:

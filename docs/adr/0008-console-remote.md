@@ -1,4 +1,4 @@
-# ADR 0007: the console remote (offer_availability_mfe) — read-only screens over the existing REST
+# ADR 0008: the console remote (offer_availability_mfe) — read-only screens over the existing REST
 
 ## Status
 

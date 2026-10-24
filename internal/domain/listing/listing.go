@@ -9,7 +9,8 @@
 // Invariants: availableQty >= 0 (ErrNegativeAvailability); an update with
 // asOf <= the current asOf is ignored (ErrStaleAvailability); a listing on a
 // node that is not ACTIVE is SUPPRESSED (ErrNodeNotSellable); one listing per
-// (catalogItemId, nodeId) (ErrDuplicateListing, enforced by the repository).
+// (catalogItemId, nodeId, ownerRef) (ErrDuplicateListing, enforced by the repository);
+// an absent ownerRef is operator-owned.
 package listing
 
 import (
@@ -28,7 +29,7 @@ var (
 	ErrStaleAvailability = errors.New("stale availability")
 	// ErrNodeNotSellable: a listing on a node that is not ACTIVE is SUPPRESSED (409).
 	ErrNodeNotSellable = errors.New("node not sellable")
-	// ErrDuplicateListing: one listing per (catalogItemId, nodeId) (409).
+	// ErrDuplicateListing: one listing per (catalogItemId, nodeId, ownerRef) (409).
 	ErrDuplicateListing = errors.New("duplicate listing")
 )
 
@@ -114,6 +115,7 @@ type Listing struct {
 	id      ID
 	item    ItemID
 	node    NodeID
+	owner   OwnerRef
 	state   State
 	reason  Reason
 	avail   Availability
@@ -122,16 +124,18 @@ type Listing struct {
 
 // Snapshot is the persisted form of a listing. Restore validates it.
 type Snapshot struct {
-	ID      ID
-	ItemID  ItemID
-	NodeID  NodeID
-	State   State
-	Reason  Reason
-	Qty     int
-	Basis   Basis
-	AsOf    time.Time
-	FeedID  string
-	Version int64
+	ID     ID
+	ItemID ItemID
+	NodeID NodeID
+	// OwnerRef is the optional seller that owns the stock; empty = operator-owned.
+	OwnerRef OwnerRef
+	State    State
+	Reason   Reason
+	Qty      int
+	Basis    Basis
+	AsOf     time.Time
+	FeedID   string
+	Version  int64
 }
 
 // Create builds a listing (aggregate version 1) and raises ListingCreated. It
@@ -139,14 +143,31 @@ type Snapshot struct {
 // otherwise it starts SUPPRESSED, DISCONTINUED winning over NODE_NOT_SELLABLE,
 // and also raises ListingSuppressed (A5, A6).
 func Create(id ID, item ItemID, node NodeID, s Sellability, now time.Time) (*Listing, []shared.Event, error) {
+	return CreateOwned(id, item, node, "", s, now)
+}
+
+// OwnerRef identifies the seller that owns the stock of a listing (the
+// sellerId of the seller context). Empty means operator-owned, which is every
+// listing that existed before the field did.
+type OwnerRef string
+
+// Valid reports whether o is empty (operator-owned) or a well-formed id.
+func (o OwnerRef) Valid() bool { return o == "" || shared.ValidID(string(o)) }
+
+// CreateOwned is Create for the stock of owner (empty = operator-owned): one
+// listing per (catalogItemId, nodeId, ownerRef), enforced by the repository.
+func CreateOwned(id ID, item ItemID, node NodeID, owner OwnerRef, s Sellability, now time.Time) (*Listing, []shared.Event, error) {
 	if !id.Valid() || !item.Valid() || !node.Valid() {
 		return nil, nil, shared.Invalid("listingId, catalogItemId and nodeId must be valid ids")
 	}
+	if !owner.Valid() {
+		return nil, nil, shared.Invalid("ownerRef %q is not a valid id", owner)
+	}
 	at := shared.UTC(now)
-	l := &Listing{id: id, item: item, node: node, state: StateLive, avail: Availability{Basis: BasisUnknown}, version: 1}
+	l := &Listing{id: id, item: item, node: node, owner: owner, state: StateLive, avail: Availability{Basis: BasisUnknown}, version: 1}
 	events := []shared.Event{ListingCreated{
 		Header:    shared.Header{Version: 1, At: at},
-		ListingID: id, CatalogItemID: item, NodeID: node,
+		ListingID: id, CatalogItemID: item, NodeID: node, OwnerRef: owner,
 	}}
 	switch {
 	case s.ItemDiscontinued:
@@ -184,7 +205,7 @@ func (l *Listing) ApplyAvailability(qty int, basis Basis, asOf time.Time, feedID
 	l.version++
 	return []shared.Event{ListingAvailabilityChanged{
 		Header:    shared.Header{Version: l.version, At: shared.UTC(now)},
-		ListingID: l.id, CatalogItemID: l.item, NodeID: l.node,
+		ListingID: l.id, CatalogItemID: l.item, NodeID: l.node, OwnerRef: l.owner,
 		AvailableQty: qty, Basis: basis, AsOf: l.avail.AsOf, FeedID: feedID,
 	}}, nil
 }
@@ -247,14 +268,18 @@ func Restore(s Snapshot) (*Listing, error) {
 		return nil, shared.Corrupt("listing %q: %v", s.ID, err)
 	}
 	return &Listing{
-		id: s.ID, item: s.ItemID, node: s.NodeID, state: s.State, reason: s.Reason, version: s.Version,
+		id: s.ID, item: s.ItemID, node: s.NodeID, owner: s.OwnerRef, state: s.State, reason: s.Reason, version: s.Version,
 		avail: Availability{Qty: s.Qty, Basis: s.Basis, AsOf: shared.UTC(s.AsOf), FeedID: s.FeedID},
 	}, nil
 }
 
+func idsValid(s Snapshot) bool {
+	return s.ID.Valid() && s.ItemID.Valid() && s.NodeID.Valid() && s.OwnerRef.Valid()
+}
+
 func checkSnapshot(s Snapshot) error {
-	if !s.ID.Valid() || !s.ItemID.Valid() || !s.NodeID.Valid() {
-		return errors.New("listingId, catalogItemId and nodeId must be valid ids")
+	if !idsValid(s) {
+		return errors.New("listingId, catalogItemId, nodeId and ownerRef must be valid ids")
 	}
 	if err := checkStateReason(s.State, s.Reason); err != nil {
 		return err
@@ -308,10 +333,13 @@ func (l *Listing) Availability() Availability { return l.avail }
 // Version returns the aggregate version (one per saved change).
 func (l *Listing) Version() int64 { return l.version }
 
+// OwnerRef returns the owning seller; empty = operator-owned.
+func (l *Listing) OwnerRef() OwnerRef { return l.owner }
+
 // Snapshot returns the persisted form.
 func (l *Listing) Snapshot() Snapshot {
 	return Snapshot{
-		ID: l.id, ItemID: l.item, NodeID: l.node, State: l.state, Reason: l.reason,
+		ID: l.id, ItemID: l.item, NodeID: l.node, OwnerRef: l.owner, State: l.state, Reason: l.reason,
 		Qty: l.avail.Qty, Basis: l.avail.Basis, AsOf: l.avail.AsOf, FeedID: l.avail.FeedID, Version: l.version,
 	}
 }

@@ -38,6 +38,26 @@ describe("CatalogItemRoute", () => {
     expect(screen.getByText("NODE_NOT_SELLABLE")).toBeInTheDocument();
   });
 
+  it("shows the item's GS1 identifiers and packaging hierarchy when it has them", async () => {
+    mockApi({
+      "GET /catalog/item-1": json(
+        catalogItem({
+          identifiers: { gtin: "00614141000232" },
+          packaging: [
+            { level: "CASE", gtin: "10614141000239", unitsPerPack: 12, grossWeightG: 4200, active: true },
+            { level: "PALLET", gtin: "20614141000236", childGtin: "10614141000239", unitsPerPack: 60, active: true },
+          ],
+        }),
+      ),
+      "GET /listings": json({ listings: [listing({ ownerRef: "seller-42" })] }),
+    });
+    renderAt("/catalog/item-1");
+    expect(await screen.findByText("00614141000232")).toBeInTheDocument();
+    expect(screen.getByText(/CASE ×12 \(10614141000239\)/)).toBeInTheDocument();
+    expect(screen.getByText(/PALLET ×60/)).toBeInTheDocument();
+    expect(screen.getByText("seller-42")).toBeInTheDocument();
+  });
+
   it("says so when no node lists the item", async () => {
     mockApi({
       "GET /catalog/item-1": json(catalogItem()),

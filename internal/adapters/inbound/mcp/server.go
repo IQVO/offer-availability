@@ -3,7 +3,7 @@
 // same application-layer read use cases the REST adapter uses. It is built on
 // the official MCP Go SDK and served over Streamable HTTP only.
 //
-// Per docs/adr/0006-mcp-server-adoption.md the surface is READ-ONLY: every
+// Per docs/adr/0007-mcp-server-adoption.md the surface is READ-ONLY: every
 // tool reads offer-availability data (browse_catalog, get_catalog_item,
 // list_listings, get_inventory_feed); creating an item or a listing and
 // applying an inventory feed stay on REST, and governance_test.go fails the

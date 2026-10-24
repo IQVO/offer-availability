@@ -9,7 +9,7 @@ every Service selects on it, so each Service selects EXACTLY ONE Deployment.
 This test fails if that ever stops being true.
 
 This chart has three components when every optional one is on: api (the
-always-on Deployment + Service), mcp (ADR 0006) and frontend (ADR 0007); the
+always-on Deployment + Service), mcp (ADR 0007) and frontend (ADR 0008); the
 HPA, Ingress and HTTPRoute are optional and default off. They are enabled
 TOGETHER here.
 
@@ -168,7 +168,7 @@ def check_components(docs: list[dict], failures: list[str]) -> None:
         if sorted(mcp_names) != sorted(MCP_ENV):
             failures.append(f"the mcp Deployment renders env beyond cmd/mcp's contract: {sorted(set(mcp_names) - set(MCP_ENV))}")
 
-    # The frontend Deployment renders NO env at all (ADR 0007).
+    # The frontend Deployment renders NO env at all (ADR 0008).
     frontend = deployments.get(f"{RELEASE}-frontend")
     if frontend is not None and env_of(frontend):
         failures.append("the frontend Deployment must render no env")

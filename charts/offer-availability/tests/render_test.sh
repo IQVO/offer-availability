@@ -164,7 +164,7 @@ expect_ok "a 45s grace period with a 20s drain" "${base[@]}" --set config.shutdo
 expect_ok "a zero drain delay with a 25s grace period" "${base[@]}" --set config.shutdownDrainDelay=0 --set terminationGracePeriodSeconds=25
 expect_refusal "an unparsable drain delay" "config.shutdownDrainDelay" "${base[@]}" --set config.shutdownDrainDelay=soon
 
-# --- optional components (ADR 0006 mcp, ADR 0007 web remote) ---------------------------
+# --- optional components (ADR 0007 mcp, ADR 0008 web remote) ---------------------------
 # Every optional component is OFF by default: a default render is the api alone.
 for c in mcp frontend; do
   if grep -q "app.kubernetes.io/component: $c\$" <<<"$render_all"; then
@@ -188,7 +188,7 @@ assert_env_rendered() {
   done
 }
 
-# mcp: its own env, never the api ConfigMap, never Kafka (ADR 0006).
+# mcp: its own env, never the api ConfigMap, never Kafka (ADR 0007).
 mcp_dep="$(helm template "$release" "$chart_dir" "${base[@]}" --set mcp.enabled=true --show-only templates/mcp-deployment.yaml)"
 grep -q 'app.kubernetes.io/component: mcp' <<<"$mcp_dep" || fail "the mcp Deployment was not rendered with mcp.enabled=true"
 grep -q 'command: \["/app/mcp"\]' <<<"$mcp_dep" || fail "the mcp Deployment must run /app/mcp"

@@ -51,16 +51,38 @@ type feedIDInput struct {
 
 // --- outputs (the REST bodies, camelCase like the REST contract) --------------
 
+type identifiersView struct {
+	GTIN string `json:"gtin,omitempty"`
+}
+
+type packDimsView struct {
+	LengthMm int `json:"lengthMm"`
+	WidthMm  int `json:"widthMm"`
+	HeightMm int `json:"heightMm"`
+}
+
+type packLevelView struct {
+	Level        string        `json:"level"`
+	GTIN         string        `json:"gtin"`
+	ChildGTIN    string        `json:"childGtin,omitempty"`
+	UnitsPerPack int           `json:"unitsPerPack"`
+	DimsMm       *packDimsView `json:"dimsMm,omitempty"`
+	GrossWeightG int           `json:"grossWeightG,omitempty"`
+	Active       bool          `json:"active"`
+}
+
 type catalogItemView struct {
-	CatalogItemID string `json:"catalogItemId"`
-	Title         string `json:"title"`
-	LengthMm      int    `json:"lengthMm"`
-	WidthMm       int    `json:"widthMm"`
-	HeightMm      int    `json:"heightMm"`
-	WeightG       int    `json:"weightG"`
-	Hazmat        bool   `json:"hazmat"`
-	Fragile       bool   `json:"fragile"`
-	State         string `json:"state"`
+	CatalogItemID string           `json:"catalogItemId"`
+	Title         string           `json:"title"`
+	LengthMm      int              `json:"lengthMm"`
+	WidthMm       int              `json:"widthMm"`
+	HeightMm      int              `json:"heightMm"`
+	WeightG       int              `json:"weightG"`
+	Hazmat        bool             `json:"hazmat"`
+	Fragile       bool             `json:"fragile"`
+	State         string           `json:"state"`
+	Identifiers   *identifiersView `json:"identifiers,omitempty"`
+	Packaging     []packLevelView  `json:"packaging,omitempty"`
 }
 
 type catalogPageView struct {
@@ -79,6 +101,7 @@ type listingView struct {
 	ListingID         string           `json:"listingId"`
 	CatalogItemID     string           `json:"catalogItemId"`
 	NodeID            string           `json:"nodeId"`
+	OwnerRef          string           `json:"ownerRef,omitempty"`
 	State             string           `json:"state"`
 	SuppressionReason string           `json:"suppressionReason,omitempty"`
 	Availability      availabilityView `json:"availability"`
@@ -124,10 +147,25 @@ func limitPtr(limit int) *int {
 }
 
 func toCatalogItem(item views.CatalogItem) catalogItemView {
-	return catalogItemView{
+	out := catalogItemView{
 		CatalogItemID: item.CatalogItemID, Title: item.Title, LengthMm: item.LengthMm, WidthMm: item.WidthMm,
 		HeightMm: item.HeightMm, WeightG: item.WeightG, Hazmat: item.Hazmat, Fragile: item.Fragile, State: item.State,
 	}
+	if item.Identifiers != nil {
+		out.Identifiers = &identifiersView{GTIN: item.Identifiers.GTIN}
+	}
+	out.Packaging = make([]packLevelView, 0, len(item.Packaging))
+	for _, p := range item.Packaging {
+		level := packLevelView{
+			Level: p.Level, GTIN: p.GTIN, ChildGTIN: p.ChildGTIN, UnitsPerPack: p.UnitsPerPack,
+			GrossWeightG: p.GrossWeightG, Active: p.Active,
+		}
+		if p.DimsMm != nil {
+			level.DimsMm = &packDimsView{LengthMm: p.DimsMm.LengthMm, WidthMm: p.DimsMm.WidthMm, HeightMm: p.DimsMm.HeightMm}
+		}
+		out.Packaging = append(out.Packaging, level)
+	}
+	return out
 }
 
 func toCatalogPage(page views.CatalogPage) catalogPageView {
@@ -146,8 +184,8 @@ func toAvailability(a views.Availability) availabilityView {
 
 func toListing(l views.Listing) listingView {
 	return listingView{
-		ListingID: l.ListingID, CatalogItemID: l.CatalogItemID, NodeID: l.NodeID, State: l.State,
-		SuppressionReason: l.SuppressionReason, Availability: toAvailability(l.Availability),
+		ListingID: l.ListingID, CatalogItemID: l.CatalogItemID, NodeID: l.NodeID, OwnerRef: l.OwnerRef,
+		State: l.State, SuppressionReason: l.SuppressionReason, Availability: toAvailability(l.Availability),
 	}
 }
 
@@ -234,8 +272,10 @@ func (d Deps) registerTools(server *mcp.Server) {
 	addTool(server, &mcp.Tool{
 		Name: "get_catalog_item",
 		Description: "Read one catalogue item by id: title, dimensions in mm (lengthMm, widthMm, heightMm), weightG, " +
-			"the hazmat and fragile flags, and its state (ACTIVE, or DISCONTINUED). Read-only; an unknown id fails with " +
-			"not-found.",
+			"the hazmat and fragile flags, its state (ACTIVE, or DISCONTINUED), the GS1 identifiers it carries " +
+			"(identifiers.gtin) when it has any, and its packaging hierarchy (packaging: one entry per declared pack " +
+			"level with level, gtin, childGtin, unitsPerPack in eaches, optional dimsMm and grossWeightG, and whether " +
+			"the level is active). Read-only; an unknown id fails with not-found.",
 		Annotations: readOnly,
 	}, d.getCatalogItem)
 
@@ -243,9 +283,10 @@ func (d Deps) registerTools(server *mcp.Server) {
 		Name: "list_listings",
 		Description: "List which nodes sell what, one keyset page at a time (listingId ascending), optionally narrowed " +
 			"to one node (nodeId) and/or one catalogue item (catalogItemId). Each listing says whether it is LIVE or " +
-			"SUPPRESSED (with the reason: NODE_NOT_SELLABLE or DISCONTINUED) and the availability a vendor's feed last " +
-			"gave it (availableQty, the vendor's basis, asOf and the feedId). Pass the returned nextCursor as after to " +
-			"get the next page. Read-only; a bad limit fails with validation-failed.",
+			"SUPPRESSED (with the reason: NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when the listing is owned by " +
+			"a seller, and the availability a vendor's feed last gave it (availableQty, the vendor's basis, asOf and " +
+			"the feedId). Pass the returned nextCursor as after to get the next page. Read-only; a bad limit fails " +
+			"with validation-failed.",
 		Annotations: readOnly,
 	}, d.listListings)
 

@@ -117,6 +117,7 @@ export function ListingsScreen() {
               columns={[
                 { key: "listing", header: "Listing", render: (l) => l.listingId },
                 { key: "node", header: "Node", render: (l) => l.nodeId },
+                { key: "owner", header: "Owner", render: (l) => l.ownerRef ?? "—" },
                 {
                   key: "item",
                   header: "Item",

@@ -1,6 +1,6 @@
 {{/*
 Fully qualified name of the frontend Module Federation remote
-deployment/service (ADR 0007).
+deployment/service (ADR 0008).
 
 The remote (web/, `offer_availability_mfe`) is served by its own nginx pod
 and reached through warehouse-infra's Nginx web gateway at

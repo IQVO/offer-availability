@@ -31,6 +31,13 @@ export function CatalogItemRoute() {
                 { label: "Hazmat", value: it.hazmat ? "yes" : "no" },
                 { label: "Fragile", value: it.fragile ? "yes" : "no" },
                 { label: "State", value: it.state },
+                { label: "GTIN", value: it.identifiers?.gtin || "—" },
+                {
+                  label: "Packaging",
+                  value: it.packaging?.length
+                    ? it.packaging.map((p) => `${p.level} ×${p.unitsPerPack} (${p.gtin}${p.active ? "" : ", retired"})`).join(" · ")
+                    : "—",
+                },
               ]}
             />
           )}
@@ -53,6 +60,7 @@ export function CatalogItemRoute() {
                   header: "Node",
                   render: (l) => <Link to={`../../listings?nodeId=${encodeURIComponent(l.nodeId)}`}>{l.nodeId}</Link>,
                 },
+                { key: "owner", header: "Owner", render: (l) => l.ownerRef ?? "—" },
                 { key: "state", header: "State", render: (l) => <ListingStatePill state={l.state} /> },
                 { key: "reason", header: "Suppressed because", render: (l) => suppressionLabel(l.suppressionReason) },
                 { key: "qty", header: "Available", render: (l) => availabilityLabel(l) },

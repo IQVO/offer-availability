@@ -1,4 +1,4 @@
-# ADR 0006: a read-only MCP server
+# ADR 0007: a read-only MCP server
 
 ## Status
 

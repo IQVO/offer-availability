@@ -45,6 +45,7 @@ func Run(t *testing.T, factory Factory) {
 		cases []named
 	}{
 		{"Catalog", catalogCases},
+		{"Packaging", packagingCases},
 		{"Listing", listingCases},
 		{"Feed", feedCases},
 		{"NodeFeedMarks", markCases},

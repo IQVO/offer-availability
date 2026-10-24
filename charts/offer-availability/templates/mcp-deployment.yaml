@@ -42,7 +42,7 @@ spec:
           # MIGRATIONS_DATABASE_URL. cmd/mcp has no auth env, starts no
           # outbox relay, runs no node-topology consumer and never dials
           # Kafka (no KAFKA_BROKERS, no consumer groups here): the surface
-          # is read-only (ADR 0006).
+          # is read-only (ADR 0007).
           env:
             - name: MCP_ADDR
               value: {{ .Values.mcp.httpAddr | quote }}

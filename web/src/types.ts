@@ -26,6 +26,21 @@ export interface CatalogItem {
   hazmat: boolean;
   fragile: boolean;
   state: CatalogItemState;
+  /** The GS1 identifiers the item carries; omitted when it has none. */
+  identifiers?: { gtin?: string };
+  /** The declared pack levels; omitted when the item has none. */
+  packaging?: PackLevel[];
+}
+
+/** One declared pack level of the packaging hierarchy (unitsPerPack is in eaches). */
+export interface PackLevel {
+  level: string;
+  gtin: string;
+  childGtin?: string;
+  unitsPerPack: number;
+  dimsMm?: { lengthMm: number; widthMm: number; heightMm: number };
+  grossWeightG?: number;
+  active: boolean;
 }
 
 /** The CatalogPage schema. */
@@ -47,6 +62,8 @@ export interface Listing {
   listingId: string;
   catalogItemId: string;
   nodeId: string;
+  /** The seller that owns the listing; omitted when the network owns it. */
+  ownerRef?: string;
   state: ListingState;
   suppressionReason?: SuppressionReason;
   availability: Availability;
