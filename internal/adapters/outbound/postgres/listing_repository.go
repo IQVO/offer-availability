@@ -22,7 +22,7 @@ var _ ports.ListingRepository = (*ListingRepo)(nil)
 // NewListingRepo constructs a ListingRepo over pool.
 func NewListingRepo(pool *pgxpool.Pool) *ListingRepo { return &ListingRepo{pool: pool} }
 
-const listingColumns = `listing_id, catalog_item_id, node_id, state, suppression_reason, available_qty, basis, as_of, feed_id, version`
+const listingColumns = `listing_id, catalog_item_id, node_id, owner_ref, state, suppression_reason, available_qty, basis, as_of, feed_id, version`
 
 func scanListing(row pgx.Row) (*listing.Listing, error) {
 	var (
@@ -31,7 +31,7 @@ func scanListing(row pgx.Row) (*listing.Listing, error) {
 		reason, feedID *string
 		asOf           *time.Time
 	)
-	if err := row.Scan(&s.ID, &s.ItemID, &s.NodeID, &state, &reason, &s.Qty, &basis, &asOf, &feedID, &s.Version); err != nil {
+	if err := row.Scan(&s.ID, &s.ItemID, &s.NodeID, &s.OwnerRef, &state, &reason, &s.Qty, &basis, &asOf, &feedID, &s.Version); err != nil {
 		return nil, notFound(err)
 	}
 	s.State, s.Basis = listing.State(state), listing.Basis(basis)
@@ -72,8 +72,14 @@ func (r *ListingRepo) Get(ctx context.Context, id listing.ID) (*listing.Listing,
 
 // FindByItemAndNode implements ports.ListingRepository.
 func (r *ListingRepo) FindByItemAndNode(ctx context.Context, item listing.ItemID, node listing.NodeID) (*listing.Listing, error) {
+	return r.FindByItemNodeOwner(ctx, item, node, "")
+}
+
+// FindByItemNodeOwner implements ports.ListingRepository.
+func (r *ListingRepo) FindByItemNodeOwner(ctx context.Context, item listing.ItemID, node listing.NodeID, owner listing.OwnerRef) (*listing.Listing, error) {
 	return scanListing(queryFor(ctx, r.pool).QueryRow(ctx,
-		`SELECT `+listingColumns+` FROM listings WHERE catalog_item_id = $1 AND node_id = $2`, string(item), string(node)))
+		`SELECT `+listingColumns+` FROM listings WHERE catalog_item_id = $1 AND node_id = $2 AND owner_ref = $3`,
+		string(item), string(node), string(owner)))
 }
 
 // GetMany implements ports.ListingRepository.
@@ -106,7 +112,7 @@ func (r *ListingRepo) List(ctx context.Context, f repository.ListingFilter, page
 
 const (
 	insertListing = `
-		INSERT INTO listings (` + listingColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+		INSERT INTO listings (` + listingColumns + `) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 	updateListing = `
 		UPDATE listings SET state = $2, suppression_reason = $3, available_qty = $4, basis = $5, as_of = $6, feed_id = $7, version = $8
 		WHERE listing_id = $1 AND version = $9`
@@ -126,7 +132,7 @@ func listingStatement(l *listing.Listing) (string, []any) {
 		feedID = &s.FeedID
 	}
 	if s.Version == 1 {
-		return insertListing, []any{string(s.ID), string(s.ItemID), string(s.NodeID), string(s.State), reason, s.Qty, string(s.Basis), asOf, feedID, s.Version}
+		return insertListing, []any{string(s.ID), string(s.ItemID), string(s.NodeID), string(s.OwnerRef), string(s.State), reason, s.Qty, string(s.Basis), asOf, feedID, s.Version}
 	}
 	return updateListing, []any{string(s.ID), string(s.State), reason, s.Qty, string(s.Basis), asOf, feedID, s.Version, s.Version - 1}
 }
@@ -134,7 +140,7 @@ func listingStatement(l *listing.Listing) (string, []any) {
 // duplicateListing returns listing.ErrDuplicateListing when err is the unique
 // violation of (catalog_item_id, node_id), else nil.
 func duplicateListing(err error) error {
-	if code, constraint := constraintOf(err); code == uniqueViolation && constraint == "listings_item_node_key" {
+	if code, constraint := constraintOf(err); code == uniqueViolation && constraint == "listings_item_node_owner_key" {
 		return listing.ErrDuplicateListing
 	}
 	return nil

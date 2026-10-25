@@ -24,15 +24,56 @@ type CatalogItem struct {
 	Hazmat        bool   `json:"hazmat"`
 	Fragile       bool   `json:"fragile"`
 	State         string `json:"state"`
+	// Identifiers and Packaging are omitted when the item has none.
+	Identifiers *Identifiers `json:"identifiers,omitempty"`
+	Packaging   []PackLevel  `json:"packaging,omitempty"`
+}
+
+// Identifiers is the CatalogItemIdentifiers schema.
+type Identifiers struct {
+	GTIN string `json:"gtin,omitempty"`
+}
+
+// DimsMm is the PackDimensions schema.
+type DimsMm struct {
+	LengthMm int `json:"lengthMm"`
+	WidthMm  int `json:"widthMm"`
+	HeightMm int `json:"heightMm"`
+}
+
+// PackLevel is the PackLevel schema: one declared pack level. UnitsPerPack is
+// in eaches.
+type PackLevel struct {
+	Level        string  `json:"level"`
+	GTIN         string  `json:"gtin"`
+	ChildGTIN    string  `json:"childGtin,omitempty"`
+	UnitsPerPack int     `json:"unitsPerPack"`
+	DimsMm       *DimsMm `json:"dimsMm,omitempty"`
+	GrossWeightG int     `json:"grossWeightG,omitempty"`
+	Active       bool    `json:"active"`
 }
 
 // CatalogItemFrom copies an item.
 func CatalogItemFrom(i *catalog.Item) CatalogItem {
 	s := i.Spec()
-	return CatalogItem{
+	v := CatalogItem{
 		CatalogItemID: string(i.ID()), Title: s.Title, LengthMm: s.LengthMm, WidthMm: s.WidthMm,
 		HeightMm: s.HeightMm, WeightG: s.WeightG, Hazmat: s.Hazmat, Fragile: s.Fragile, State: string(i.State()),
 	}
+	if !i.GTIN().IsZero() {
+		v.Identifiers = &Identifiers{GTIN: i.GTIN().String()}
+	}
+	for _, d := range i.Packaging() {
+		p := PackLevel{
+			Level: string(d.Level), GTIN: d.GTIN.String(), ChildGTIN: d.ChildGTIN.String(),
+			UnitsPerPack: d.UnitsPerPack, GrossWeightG: d.GrossWeightG, Active: d.Active,
+		}
+		if d.LengthMm > 0 {
+			p.DimsMm = &DimsMm{LengthMm: d.LengthMm, WidthMm: d.WidthMm, HeightMm: d.HeightMm}
+		}
+		v.Packaging = append(v.Packaging, p)
+	}
+	return v
 }
 
 // CatalogPage is the CatalogPage schema.
@@ -54,6 +95,7 @@ type Listing struct {
 	ListingID         string       `json:"listingId"`
 	CatalogItemID     string       `json:"catalogItemId"`
 	NodeID            string       `json:"nodeId"`
+	OwnerRef          string       `json:"ownerRef,omitempty"`
 	State             string       `json:"state"`
 	SuppressionReason string       `json:"suppressionReason,omitempty"`
 	Availability      Availability `json:"availability"`
@@ -68,7 +110,7 @@ func ListingFrom(l *listing.Listing) Listing {
 		av.AsOf = &asOf
 	}
 	return Listing{
-		ListingID: string(l.ID()), CatalogItemID: string(l.ItemID()), NodeID: string(l.NodeID()),
+		ListingID: string(l.ID()), CatalogItemID: string(l.ItemID()), NodeID: string(l.NodeID()), OwnerRef: string(l.OwnerRef()),
 		State: string(l.State()), SuppressionReason: string(l.Reason()), Availability: av,
 	}
 }

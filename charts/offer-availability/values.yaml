@@ -176,3 +176,66 @@ terminationGracePeriodSeconds: 60
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# The read-only MCP server (ADR 0007): cmd/mcp over Streamable HTTP, its own
+# Deployment + ClusterIP Service beside the api. It reads the same Postgres
+# (DATABASE_URL from the same Secret), never dials Kafka, never starts the
+# relay, the consumer or the janitor, and has no auth (fleet-wide revert).
+# Off by default: enable per environment.
+mcp:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8090"                  # MCP_ADDR
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+  # Kong exposure: /api/mcp/offer-availability -> Service :8090, prefix
+  # rewritten to /mcp. Needs the Gateway parentRef from warehouse-infra.
+  route:
+    enabled: false
+    path: "/api/mcp/offer-availability"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  extraEnv: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# web/ (offer_availability_mfe): the Module Federation remote served by its
+# own nginx pod, reached through warehouse-infra's Nginx web gateway at
+# /mfes/offer-availability/. Never routed by this chart; ClusterIP only.
+# The Deployment renders NO env: nothing about the remote is configured in
+# the cluster (ADR 0008).
+frontend:
+  enabled: false
+  replicaCount: 1
+  image:
+    repository: warehouse/offer-availability-frontend
+    pullPolicy: IfNotPresent
+    tag: ""
+  service:
+    port: 80
+    targetPort: 8080
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    fsGroup: 101
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

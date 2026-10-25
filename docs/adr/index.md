@@ -11,3 +11,6 @@ The *Status* column is copied from each ADR's own `## Status` section.
 | [0003](./0003-consumed-contracts-and-local-node-status.md) | Consumed contracts and the local node status view | Accepted (2026-10-23) |
 | [0004](./0004-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-23) |
 | [0005](./0005-runtime-relay-consumer-and-idempotency.md) | Runtime: outbox relay cap, consumer dead letters, retention janitor and the FAILED feed | Accepted (2026-10-23) |
+| [0006](./0006-catalog-gtin-packaging-and-listing-owner.md) | Catalogue GTIN and packaging hierarchy, and the optional owner of a listing | Accepted (2026-10-24) |
+| [0007](./0007-mcp-server-adoption.md) | A read-only MCP server | Accepted (2026-10-24) |
+| [0008](./0008-console-remote.md) | The console remote (offer_availability_mfe) — read-only screens over the existing REST | Accepted (2026-10-24) |

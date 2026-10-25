@@ -20,6 +20,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
+	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
 
 // CatalogRepository persists CatalogItem aggregates.
@@ -29,7 +30,12 @@ type CatalogRepository interface {
 	// List returns the items of the page ordered by id ascending; no match is
 	// an empty list, never an error.
 	List(ctx context.Context, page repository.Page) ([]*catalog.Item, error)
-	// Save persists the item under the concurrency rule of the package comment.
+	// FindByGTIN returns the id of the item whose own GTIN or pack level GTIN
+	// is gtin, or ErrNotFound. It backs the GTIN uniqueness pre-check.
+	FindByGTIN(ctx context.Context, gtin gs1.GTIN) (catalog.ID, error)
+	// Save persists the item and its pack levels under the concurrency rule of
+	// the package comment. A GTIN another item holds is
+	// catalog.ErrGtinAlreadyAssigned (unique index).
 	Save(ctx context.Context, i *catalog.Item) error
 }
 
@@ -37,9 +43,13 @@ type CatalogRepository interface {
 type ListingRepository interface {
 	// Get returns the listing, or ErrNotFound.
 	Get(ctx context.Context, id listing.ID) (*listing.Listing, error)
-	// FindByItemAndNode returns the listing of the pair, or ErrNotFound. It
-	// backs the ErrDuplicateListing pre-check.
+	// FindByItemAndNode returns the operator-owned listing of the pair, or
+	// ErrNotFound.
 	FindByItemAndNode(ctx context.Context, item listing.ItemID, node listing.NodeID) (*listing.Listing, error)
+	// FindByItemNodeOwner returns the listing of the triple, or ErrNotFound; an
+	// empty owner is the operator-owned listing, which is what
+	// FindByItemAndNode answers.
+	FindByItemNodeOwner(ctx context.Context, item listing.ItemID, node listing.NodeID, owner listing.OwnerRef) (*listing.Listing, error)
 	// GetMany returns the stored listings among ids, ordered by id ascending;
 	// an id that is not stored is simply absent (never an error).
 	GetMany(ctx context.Context, ids []listing.ID) ([]*listing.Listing, error)
@@ -51,7 +61,7 @@ type ListingRepository interface {
 	// ascending; no match is an empty list, never an error.
 	List(ctx context.Context, filter repository.ListingFilter, page repository.Page) ([]*listing.Listing, error)
 	// Save persists the listing under the concurrency rule of the package
-	// comment. A second listing for the same (item, node) is
+	// comment. A second listing for the same (item, node, owner) is
 	// listing.ErrDuplicateListing (unique index).
 	Save(ctx context.Context, l *listing.Listing) error
 	// SaveMany persists the listings under the same rule, all or none.

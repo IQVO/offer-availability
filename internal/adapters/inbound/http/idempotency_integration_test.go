@@ -49,7 +49,7 @@ func newPGRig(t *testing.T) *pgRig {
 		Clock: clock.System{}, IDs: ids.UUID{},
 	}
 	h, err := NewRouter(&Server{
-		CreateCatalogItem: usecases.NewCreateCatalogItem(d), DiscontinueItem: usecases.NewDiscontinueItem(d),
+		CreateCatalogItem: usecases.NewCreateCatalogItem(d), DiscontinueItem: usecases.NewDiscontinueItem(d), DeclarePackLevel: usecases.NewDeclarePackLevel(d), RetirePackLevel: usecases.NewRetirePackLevel(d),
 		BrowseCatalog: usecases.NewBrowseCatalog(d.Catalog), GetCatalogItem: usecases.NewGetCatalogItem(d.Catalog),
 		CreateListing: usecases.NewCreateListing(d), ListListings: usecases.NewListListings(d.Listings),
 		ApplyInventoryFeed: usecases.NewApplyInventoryFeed(d), GetInventoryFeed: usecases.NewGetInventoryFeed(d.Feeds),

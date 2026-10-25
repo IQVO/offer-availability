@@ -16,6 +16,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
+	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
 
 var errBoom = errors.New("boom")
@@ -68,9 +69,9 @@ func failAt(calls *int, errs []error) error {
 
 type flakyCatalog struct {
 	ports.CatalogRepository
-	getErr, listErr error
-	saveErrs        []error
-	saves           int
+	getErr, listErr, findErr error
+	saveErrs                 []error
+	saves                    int
 }
 
 func (f *flakyCatalog) Get(ctx context.Context, id catalog.ID) (*catalog.Item, error) {
@@ -78,6 +79,13 @@ func (f *flakyCatalog) Get(ctx context.Context, id catalog.ID) (*catalog.Item, e
 		return nil, f.getErr
 	}
 	return f.CatalogRepository.Get(ctx, id)
+}
+
+func (f *flakyCatalog) FindByGTIN(ctx context.Context, g gs1.GTIN) (catalog.ID, error) {
+	if f.findErr != nil {
+		return "", f.findErr
+	}
+	return f.CatalogRepository.FindByGTIN(ctx, g)
 }
 
 func (f *flakyCatalog) List(ctx context.Context, p repository.Page) ([]*catalog.Item, error) {

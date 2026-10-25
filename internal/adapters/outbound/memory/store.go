@@ -31,6 +31,7 @@ import (
 type Store struct {
 	mu        sync.Mutex
 	items     map[catalog.ID]catalog.Snapshot
+	packs     map[catalog.ID][]catalog.PackLevelDef
 	listings  map[listing.ID]listing.Snapshot
 	feeds     map[feed.ID]feed.Snapshot
 	marks     map[listing.NodeID]time.Time
@@ -42,7 +43,7 @@ type Store struct {
 // NewStore returns an empty store.
 func NewStore() *Store {
 	return &Store{
-		items: map[catalog.ID]catalog.Snapshot{}, listings: map[listing.ID]listing.Snapshot{},
+		items: map[catalog.ID]catalog.Snapshot{}, packs: map[catalog.ID][]catalog.PackLevelDef{}, listings: map[listing.ID]listing.Snapshot{},
 		feeds: map[feed.ID]feed.Snapshot{}, marks: map[listing.NodeID]time.Time{},
 		nodes: map[nodestatus.ID]nodestatus.Snapshot{}, processed: map[string]string{},
 	}
@@ -52,6 +53,7 @@ func NewStore() *Store {
 // replaced, never edited in place, so copying the maps is enough.
 type state struct {
 	items     map[catalog.ID]catalog.Snapshot
+	packs     map[catalog.ID][]catalog.PackLevelDef
 	listings  map[listing.ID]listing.Snapshot
 	feeds     map[feed.ID]feed.Snapshot
 	marks     map[listing.NodeID]time.Time
@@ -70,14 +72,14 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 
 func (s *Store) capture() state {
 	return state{
-		items: cloneMap(s.items), listings: cloneMap(s.listings), feeds: cloneMap(s.feeds), marks: cloneMap(s.marks),
+		items: cloneMap(s.items), packs: cloneMap(s.packs), listings: cloneMap(s.listings), feeds: cloneMap(s.feeds), marks: cloneMap(s.marks),
 		nodes: cloneMap(s.nodes), processed: cloneMap(s.processed), outbox: append([]shared.Event(nil), s.outbox...),
 	}
 }
 
 func (s *Store) restore(st state) {
-	s.items, s.listings, s.feeds, s.marks, s.nodes, s.processed, s.outbox =
-		st.items, st.listings, st.feeds, st.marks, st.nodes, st.processed, st.outbox
+	s.items, s.packs, s.listings, s.feeds, s.marks, s.nodes, s.processed, s.outbox =
+		st.items, st.packs, st.listings, st.feeds, st.marks, st.nodes, st.processed, st.outbox
 }
 
 // txKey marks a ctx that carries the open unit of work of one store.

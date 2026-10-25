@@ -40,7 +40,10 @@ paths:
       summary: Create a catalogue item (CreateCatalogItem)
       description: >-
         Creates an ACTIVE catalogue item under a new catalogItemId and
-        publishes CatalogItemCreated. Dimensions and weight must be positive.
+        publishes CatalogItemCreated (with identifiers.gtin when given).
+        Dimensions and weight must be positive. identifiers.gtin is optional and
+        checked (GS1 mod-10); a GTIN another item or pack level holds is 409
+        gtin-already-assigned.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -57,7 +60,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/CatalogItem'
         '422':
-          description: "invalid-item-dimensions (ErrInvalidItemDimensions), or validation-failed (a malformed title)."
+          description: "invalid-item-dimensions (ErrInvalidItemDimensions), invalid-gtin, or validation-failed (a malformed title)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: gtin-already-assigned (identifiers.gtin belongs to another item or pack level).
           content:
             application/problem+json:
               schema:
@@ -87,6 +96,101 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /catalog-items/{catalogItemId}/packaging/{level}:
+    put:
+      tags: [Catalog items]
+      operationId: declarePackLevel
+      summary: Declare a pack level of a catalogue item (DeclarePackLevel)
+      description: >-
+        Declares the pack level (EACH, INNER, CASE or PALLET) identified by a
+        GS1 GTIN and publishes CatalogItemPackagingDeclared (ADR 0006).
+        unitsPerPack is in eaches: 1 for EACH, at least 2 above it and at least
+        twice the child's. A level above EACH names the childGtin of an active
+        lower level of the same item. The unitsPerPack of a GTIN is immutable:
+        re-declaring an active GTIN with another count is 409
+        pack-quantity-immutable (a new count is a new GTIN). Declaring a NEW
+        GTIN at a level that has an active one retires the old level
+        (CatalogItemPackLevelRetired, then CatalogItemPackagingDeclared, one
+        aggregate version). The identical declaration changes nothing and
+        publishes nothing; new dimsMm or grossWeightG on an active GTIN are
+        updated in place. A GTIN identifies one item or pack level, forever
+        (409 gtin-already-assigned). A DISCONTINUED item takes no packaging
+        change (409 illegal-transition).
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/PackLevelPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeclarePackLevelRequest'
+      responses:
+        '200':
+          description: The item with its packaging.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: >-
+            gtin-already-assigned, pack-quantity-immutable, illegal-transition
+            (the item is DISCONTINUED) or concurrent-update after one automatic retry.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: >-
+            invalid-gtin, invalid-pack-level, invalid-pack-quantity,
+            pack-level-order, invalid-pack-dimensions or validation-failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /catalog-items/{catalogItemId}/packaging/{level}:retire:
+    post:
+      tags: [Catalog items]
+      operationId: retirePackLevel
+      summary: Retire the active pack level of a catalogue item (RetirePackLevel)
+      description: >-
+        Retires the active definition at the level and publishes
+        CatalogItemPackLevelRetired. The definition is kept (active false), its
+        GTIN is never reusable. A level that only has retired history is
+        returned unchanged and publishes nothing; a level never declared is 404
+        pack-level-not-found. Takes no body.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/PackLevelPath'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The item with its packaging.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '404':
+          description: not-found (unknown catalogItemId) or pack-level-not-found.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: invalid-pack-level.
           content:
             application/problem+json:
               schema:
@@ -287,6 +391,13 @@ components:
       required: true
       schema:
         type: string
+    PackLevelPath:
+      name: level
+      in: path
+      required: true
+      description: The packaging level, lowest first EACH < INNER < CASE < PALLET.
+      schema:
+        $ref: '#/components/schemas/PackLevelName'
     Limit:
       name: limit
       in: query
@@ -328,9 +439,11 @@ components:
           description: >-
             Problem type slug: the shared not-found, illegal-transition,
             concurrent-update and validation-failed, or one of this context's
-            (invalid-item-dimensions, negative-availability, stale-availability,
-            node-not-sellable, duplicate-listing, listing-not-on-node,
-            feed-already-applied).
+            (invalid-item-dimensions, invalid-gtin, gtin-already-assigned,
+            pack-quantity-immutable, pack-level-order, invalid-pack-quantity,
+            invalid-pack-dimensions, invalid-pack-level, pack-level-not-found,
+            negative-availability, stale-availability, node-not-sellable,
+            duplicate-listing, listing-not-on-node, feed-already-applied).
           example: duplicate-listing
         title:
           type: string
@@ -365,6 +478,20 @@ components:
           type: boolean
         fragile:
           type: boolean
+        identifiers:
+          $ref: '#/components/schemas/CatalogItemIdentifiers'
+    CatalogItemIdentifiers:
+      type: object
+      description: Optional identifiers of the item.
+      properties:
+        gtin:
+          type: string
+          pattern: '^[0-9]{8}$|^[0-9]{12,14}$'
+          description: >-
+            GS1 GTIN (8, 12, 13 or 14 digits) with a valid mod-10 check digit;
+            variable measure GTINs (indicator digit 9) are refused. Answered
+            normalised to 14 digits. One GTIN identifies one item or pack level.
+          example: '06141410000120'
     CatalogItemState:
       type: string
       enum: [ACTIVE, DISCONTINUED]
@@ -390,6 +517,84 @@ components:
           type: boolean
         state:
           $ref: '#/components/schemas/CatalogItemState'
+        identifiers:
+          $ref: '#/components/schemas/CatalogItemIdentifiers'
+        packaging:
+          type: array
+          description: >-
+            Every pack level ever declared, lowest level first (retired ones
+            have active false). Omitted when the item has none.
+          items:
+            $ref: '#/components/schemas/PackLevel'
+    PackLevelName:
+      type: string
+      enum: [EACH, INNER, CASE, PALLET]
+    PackDimensions:
+      type: object
+      required: [lengthMm, widthMm, heightMm]
+      properties:
+        lengthMm:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        widthMm:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        heightMm:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+    DeclarePackLevelRequest:
+      type: object
+      required: [gtin, unitsPerPack]
+      properties:
+        gtin:
+          type: string
+          pattern: '^[0-9]{8}$|^[0-9]{12,14}$'
+          description: The GS1 GTIN identifying this level.
+          example: '06141410000298'
+        childGtin:
+          type: string
+          pattern: '^[0-9]{8}$|^[0-9]{12,14}$'
+          description: The GTIN of the active lower level of this item; required above EACH, absent for EACH.
+          example: '06141410000120'
+        unitsPerPack:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          description: Eaches in one pack. 1 for EACH; at least 2 above it and a multiple (at least twice) of the child's.
+          example: 6
+        dimsMm:
+          $ref: '#/components/schemas/PackDimensions'
+        grossWeightG:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Gross weight in grams; at least the weight of the contents when the child's is known.
+    PackLevel:
+      type: object
+      required: [level, gtin, unitsPerPack, active]
+      properties:
+        level:
+          $ref: '#/components/schemas/PackLevelName'
+        gtin:
+          type: string
+          description: The 14-digit GTIN of the level.
+          example: '06141410000298'
+        childGtin:
+          type: string
+          example: '06141410000120'
+        unitsPerPack:
+          type: integer
+          description: Eaches in one pack.
+          example: 6
+        dimsMm:
+          $ref: '#/components/schemas/PackDimensions'
+        grossWeightG:
+          type: integer
+        active:
+          type: boolean
     CatalogPage:
       type: object
       required: [items]
@@ -409,6 +614,11 @@ components:
           type: string
         nodeId:
           type: string
+        ownerRef:
+          type: string
+          description: >-
+            Optional sellerId that owns the stock. Absent = operator-owned. One
+            listing per (catalogItemId, nodeId, ownerRef).
     Basis:
       type: string
       description: Why the node gave the number; kept as the vendor declared it, never re-derived.
@@ -446,6 +656,9 @@ components:
           type: string
         nodeId:
           type: string
+        ownerRef:
+          type: string
+          description: The owning seller; omitted for an operator-owned listing.
         state:
           $ref: '#/components/schemas/ListingState'
         suppressionReason:
