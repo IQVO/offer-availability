@@ -47,8 +47,9 @@ API_ENV = (
     "OUTBOX_RELAY_INTERVAL", "OUTBOX_MAX_ATTEMPTS", "RETENTION_INTERVAL", "SHUTDOWN_DRAIN_DELAY", "LOG_LEVEL",
 )
 
-# Every env var cmd/mcp reads (cmd/mcp/main.go): read-only, never Kafka.
-MCP_ENV = ("MCP_ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL")
+# Every env var cmd/mcp reads (main.go, telemetry.go): read-only, never Kafka.
+MCP_ENV = ("MCP_ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL",
+           "SERVICE_VERSION", "ENVIRONMENT", "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT")
 
 
 def helm_template(extra_args: list[str]) -> subprocess.CompletedProcess:

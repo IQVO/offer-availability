@@ -37,8 +37,9 @@ spec:
             - name: http
               containerPort: {{ .Values.mcp.service.targetPort }}
               protocol: TCP
-          # Env contract verified against cmd/mcp/main.go: MCP_ADDR,
-          # LOG_LEVEL, DATABASE_URL and (migration step only)
+          # Env contract verified against cmd/mcp (main.go, telemetry.go): MCP_ADDR,
+          # LOG_LEVEL, SERVICE_VERSION, ENVIRONMENT, OTEL_SERVICE_NAME,
+          # OTEL_EXPORTER_OTLP_ENDPOINT, DATABASE_URL and (migration step only)
           # MIGRATIONS_DATABASE_URL. cmd/mcp has no auth env, starts no
           # outbox relay, runs no node-topology consumer and never dials
           # Kafka (no KAFKA_BROKERS, no consumer groups here): the surface
@@ -48,6 +49,16 @@ spec:
               value: {{ .Values.mcp.httpAddr | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            - name: SERVICE_VERSION
+              value: {{ .Values.mcp.serviceVersion | default .Values.image.tag | default .Chart.AppVersion | quote }}
+            - name: ENVIRONMENT
+              value: {{ .Values.mcp.environment | quote }}
+            {{- if .Values.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ printf "%s-mcp" .Values.otel.serviceName | quote }}
+            {{- end }}
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -63,6 +74,7 @@ spec:
                   key: {{ .Values.database.migrationsExistingSecretKey }}
                   optional: true
             {{- end }}
+            {{- include "offer-availability.requireNoOwnedEnv" (dict "list" .Values.mcp.extraEnv "where" "mcp.extraEnv") }}
             {{- range .Values.mcp.extraEnv }}
             - {{ toYaml . | nindent 14 | trim }}
             {{- end }}

@@ -131,6 +131,22 @@ only). Called with the list to check and the name of its value.
 {{- end -}}
 
 {{/*
+extraEnv may not set a variable the chart renders itself from otel.* and
+environment (the same name would be set twice). Called with the list to check
+and the name of its value.
+*/}}
+{{- define "offer-availability.requireNoOwnedEnv" -}}
+{{- $where := .where -}}
+{{- $owned := list "ENVIRONMENT" "SERVICE_VERSION" "OTEL_SERVICE_NAME" "OTEL_EXPORTER_OTLP_ENDPOINT" -}}
+{{- range .list -}}
+{{- $name := toString .name -}}
+{{- if has $name $owned -}}
+{{- fail (printf "%s sets %s - the chart renders it from otel.* / environment / image.tag; set the value instead." $where $name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 SHUTDOWN_DRAIN_DELAY in whole seconds (rounded up), for the grace-period
 check. Accepts "0", "<n>s", "<n>m" and "<n>ms"; empty is the binary's default
 (5s). Anything else fails the render naming the value.
@@ -172,5 +188,6 @@ Deployment includes it, so a mis-set release fails `helm template` /
 {{- include "offer-availability.requireKafka" . -}}
 {{- include "offer-availability.requireConsumerGroups" . -}}
 {{- include "offer-availability.requireNoModeEnv" (dict "list" .Values.extraEnv "where" "extraEnv") -}}
+{{- include "offer-availability.requireNoOwnedEnv" (dict "list" .Values.extraEnv "where" "extraEnv") -}}
 {{- include "offer-availability.requireGracePeriod" . -}}
 {{- end -}}
