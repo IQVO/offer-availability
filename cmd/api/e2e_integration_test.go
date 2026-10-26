@@ -416,7 +416,8 @@ func assertTopic(t *testing.T, s *service, w world) {
 		case e.Source() != "/retailnetwork/offer-availability" || e.DataContentType() != "application/json" ||
 			e.DataSchema() != "urn:retailnetwork:offer-availability:events:"+name+":v1" || e.SpecVersion() != "1.0":
 			t.Errorf("%s: attributes source %q dct %q dataschema %q spec %q", want, e.Source(), e.DataContentType(), e.DataSchema(), e.SpecVersion())
-		case len(msg.Headers) != 1 || msg.Headers["content-type"] != cloudevents.MediaType:
+		case len(msg.Headers) != 2 || msg.Headers["content-type"] != cloudevents.MediaType || msg.Headers["traceparent"] == "":
+			// traceparent is the only header besides content-type (ADR 0009); the CloudEvents attributes are untouched.
 			t.Errorf("%s: headers %v", want, msg.Headers)
 		case e.Time().IsZero() || e.Time().Location() != time.UTC || seen[e.ID()]:
 			t.Errorf("%s: time %v, duplicate id %v", want, e.Time(), seen[e.ID()])

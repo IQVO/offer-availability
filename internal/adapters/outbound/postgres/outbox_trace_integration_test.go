@@ -19,11 +19,11 @@ import (
 	"github.com/claudioed/offer-availability/internal/testing/pgtest"
 )
 
-// stubEncoder yields one fixed message whatever the events, so the test pins
+// traceStubEncoder yields one fixed message whatever the events, so the test pins
 // only what the repository adds to it.
-type stubEncoder struct{ n *int }
+type traceStubEncoder struct{ n *int }
 
-func (e stubEncoder) Encode(...shared.Event) ([]outbox.Message, error) {
+func (e traceStubEncoder) Encode(...shared.Event) ([]outbox.Message, error) {
 	*e.n++
 	return []outbox.Message{{
 		EventID: fmt.Sprintf("evt-trace-%d", *e.n), Topic: "t", EventType: "x.Probed", Subject: "i-1", Key: []byte("i-1"), Value: []byte(`{}`),
@@ -39,7 +39,7 @@ func TestEventOutboxAppendStoresTheActiveTraceparent(t *testing.T) {
 	t.Cleanup(func() { otel.SetTextMapPropagator(previous) })
 
 	pool := pgtest.NewPool(t)
-	repo := postgres.NewEventOutbox(postgres.NewOutboxRepo(pool), stubEncoder{n: new(int)})
+	repo := postgres.NewEventOutbox(postgres.NewOutboxRepo(pool), traceStubEncoder{n: new(int)})
 	event := catalog.CatalogItemDiscontinued{}
 
 	ctx, span := sdktrace.NewTracerProvider().Tracer("test").Start(context.Background(), "POST /catalog-items/{catalogItemId}:discontinue")
