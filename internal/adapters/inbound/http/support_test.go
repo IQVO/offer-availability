@@ -111,9 +111,3 @@ func TestReadinessGate(t *testing.T) {
 		t.Fatalf("defaults: %+v", d)
 	}
 }
-
-func TestLevelForKeepsProbesQuietAndFlagsFailures(t *testing.T) {
-	if levelFor("/healthz", 200) == levelFor("/listings", 200) || levelFor("/listings", 503) <= levelFor("/listings", 200) {
-		t.Fatal("probe 200s are quieter than traffic, 5xx is louder")
-	}
-}

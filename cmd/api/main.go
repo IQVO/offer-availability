@@ -13,6 +13,10 @@
 //	OUTBOX_MAX_ATTEMPTS      failures before the relay excludes a row (default 20, 0 = unlimited; ADR 0005)
 //	SHUTDOWN_DRAIN_DELAY     wait after flipping /readyz before closing (default 5s)
 //	LOG_LEVEL                debug|info|warn|error (default info)
+//	OTEL_SERVICE_NAME            service.name of spans and metrics (default offer-availability)
+//	OTEL_EXPORTER_OTLP_ENDPOINT  Collector OTLP/gRPC endpoint (default telemetry.DefaultEndpoint); export never blocks
+//	SERVICE_VERSION              service.version (default dev)
+//	ENVIRONMENT                  deployment.environment.name (default local)
 //
 // The process exits non-zero when the relay returns on its own, so the
 // orchestrator restarts it.

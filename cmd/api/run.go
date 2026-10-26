@@ -19,6 +19,7 @@ import (
 	outboundkafka "github.com/claudioed/offer-availability/internal/adapters/outbound/kafka"
 	"github.com/claudioed/offer-availability/internal/adapters/outbound/postgres"
 	"github.com/claudioed/offer-availability/internal/adapters/outbound/postgres/pgtx"
+	"github.com/claudioed/offer-availability/internal/adapters/outbound/telemetry"
 	"github.com/claudioed/offer-availability/internal/application/usecases"
 	"github.com/claudioed/offer-availability/internal/bootretry"
 )
@@ -26,7 +27,9 @@ import (
 // run boots the service and serves until SIGINT/SIGTERM or until ctx is
 // cancelled (the integration test stops the real entry point that way).
 func run(ctx context.Context) error {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: newLogLevel(os.Getenv(envLogLevel))}))
+	// The handler is wrapped so a record written with a span-carrying context
+	// (the *Context slog variants) also carries trace_id and span_id.
+	logger := slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: newLogLevel(os.Getenv(envLogLevel))})))
 	slog.SetDefault(logger)
 
 	// Misconfiguration is refused before anything is opened or bound.
@@ -34,16 +37,33 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	// closeAdapters (pool.Close) is deferred FIRST so it runs LAST, after the
-	// HTTP drain and the workers have stopped.
+	// Telemetry comes up before the router is built (otelchimetric binds the
+	// global MeterProvider at construction) and is flushed LAST: deferred before
+	// everything below, so the final spans of the drain still leave the process.
+	tel := loadTelemetryEnv(os.Getenv)
+	flushTelemetry, err := startTelemetry(logger, tel)
+	if err != nil {
+		return err
+	}
+	defer flushTelemetry()
+
+	// closeAdapters (pool.Close) is deferred FIRST of the adapters so it runs
+	// LAST of them, after the HTTP drain and the workers have stopped.
 	ad, closeAdapters, err := buildAdapters(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer closeAdapters()
 
+	// The business counter binds to the MeterProvider telemetry.Setup installed.
+	feedMetrics, err := telemetry.NewFeedMetrics()
+	if err != nil {
+		return err
+	}
+	ad.deps.Metrics = feedMetrics
+
 	readiness := newReadiness(ad.pool.Ping, cfg.brokers)
-	handler, err := inboundhttp.NewRouter(buildServer(ad, readiness, logger))
+	handler, err := inboundhttp.NewRouter(buildServer(ad, readiness, logger, tel.serviceName))
 	if err != nil {
 		return err
 	}
@@ -110,7 +130,7 @@ func postgresAdapters(pool *pgxpool.Pool) adapters {
 }
 
 // buildServer wires every use case into the REST server.
-func buildServer(ad adapters, readiness *inboundhttp.Readiness, logger *slog.Logger) *inboundhttp.Server {
+func buildServer(ad adapters, readiness *inboundhttp.Readiness, logger *slog.Logger, serviceName string) *inboundhttp.Server {
 	d := ad.deps
 	return &inboundhttp.Server{
 		CreateCatalogItem:  usecases.NewCreateCatalogItem(d),
@@ -126,6 +146,7 @@ func buildServer(ad adapters, readiness *inboundhttp.Readiness, logger *slog.Log
 		Idempotency:        inboundhttp.RequireIdempotencyKey(ad.pool, pgtx.With),
 		Readiness:          readiness,
 		Logger:             logger,
+		ServiceName:        serviceName,
 	}
 }
 
