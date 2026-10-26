@@ -89,7 +89,7 @@ Tier 1 (identical in every repo) and Tier 2 (this context's business metric):
    an `outcome` attribute rather than several counters, UCUM unit, a description
    that says what a human should conclude when it moves.
 
-### Why this metric (assumption A25)
+### Why this metric (assumption recorded here)
 
 The model left the choice open, so this ADR records it. The service's reason to
 exist (ADR 0001) is to tell the network what it can sell and where; the one
