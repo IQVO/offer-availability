@@ -218,7 +218,7 @@ func deref(t *time.Time) time.Time {
 func (d Deps) browseCatalog(ctx context.Context, in browseCatalogInput) (catalogPageView, error) {
 	page, err := d.BrowseCatalog.Execute(ctx, usecases.PageQuery{Limit: limitPtr(in.Limit), After: in.After})
 	if err != nil {
-		return catalogPageView{}, mapError(err)
+		return catalogPageView{}, mapError(ctx, err)
 	}
 	return toCatalogPage(page), nil
 }
@@ -226,7 +226,7 @@ func (d Deps) browseCatalog(ctx context.Context, in browseCatalogInput) (catalog
 func (d Deps) getCatalogItem(ctx context.Context, in catalogItemIDInput) (catalogItemView, error) {
 	item, err := d.GetCatalogItem.Execute(ctx, catalog.ID(in.CatalogItemID))
 	if err != nil {
-		return catalogItemView{}, mapError(err)
+		return catalogItemView{}, mapError(ctx, err)
 	}
 	return toCatalogItem(item), nil
 }
@@ -238,7 +238,7 @@ func (d Deps) listListings(ctx context.Context, in listListingsInput) (listingPa
 		Page:          usecases.PageQuery{Limit: limitPtr(in.Limit), After: in.After},
 	})
 	if err != nil {
-		return listingPageView{}, mapError(err)
+		return listingPageView{}, mapError(ctx, err)
 	}
 	return toListingPage(page), nil
 }
@@ -246,7 +246,7 @@ func (d Deps) listListings(ctx context.Context, in listListingsInput) (listingPa
 func (d Deps) getInventoryFeed(ctx context.Context, in feedIDInput) (inventoryFeedView, error) {
 	f, err := d.GetInventoryFeed.Execute(ctx, feed.ID(in.FeedID))
 	if err != nil {
-		return inventoryFeedView{}, mapError(err)
+		return inventoryFeedView{}, mapError(ctx, err)
 	}
 	return toInventoryFeed(f), nil
 }
