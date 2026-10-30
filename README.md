@@ -1,5 +1,7 @@
 # offer-availability
 
+[![CI](https://github.com/IQVO/offer-availability/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/IQVO/offer-availability/actions/workflows/ci.yml?query=branch%3Adevelop) [![coverage gate](https://img.shields.io/badge/coverage%20gate-90%25-brightgreen)](https://github.com/IQVO/offer-availability/blob/develop/Makefile) [![Go](https://img.shields.io/badge/go-1.27.3-00ADD8?logo=go&logoColor=white)](https://github.com/IQVO/offer-availability/blob/develop/go.mod) [![release](https://img.shields.io/github/v/release/IQVO/offer-availability?sort=semver)](https://github.com/IQVO/offer-availability/releases) [![docs](https://img.shields.io/badge/docs-iqvo.github.io-blue)](https://iqvo.github.io/offer-availability/) [![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/IQVO/offer-availability/blob/develop/LICENSE)
+
 Retail network, bounded context **Offer & Availability** (Supporting, commerce
 tier): what the network can sell and from which node. It owns the catalogue
 items (with their GS1 packaging hierarchies), the per-node listings, vendor
