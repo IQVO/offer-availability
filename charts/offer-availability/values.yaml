@@ -135,9 +135,26 @@ database:
 kafka:
   brokers: ""
 
+# Observability (ADR 0009): the fleet pipeline is pod --OTLP/gRPC--> Collector
+# --> Jaeger (traces) and Prometheus (metrics); logs are stdout JSON for Alloy
+# and Loki. Export never blocks, so a Collector that is down costs telemetry and
+# nothing else, but otel.enabled=false renders no OTEL_* env at all (the binaries
+# then fall back to localhost:4317). serviceName is OTEL_SERVICE_NAME of the api;
+# the mcp component gets "<serviceName>-mcp". SERVICE_VERSION is the image tag
+# (appVersion when empty), ENVIRONMENT is `environment`.
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  serviceName: "offer-availability"
+
+# ENVIRONMENT of the api: deployment.environment.name on every span, metric and
+# log of the api. (mcp.environment sets the same for the mcp component.)
+environment: "production"
+
 # Extra env vars appended to the api container as a raw list. The chart
-# refuses any *_MODE variable here: the service has no in-memory, log or
-# permissive mode.
+# refuses any *_MODE variable here (the service has no in-memory, log or
+# permissive mode) and any variable the chart renders itself (OTEL_*,
+# SERVICE_VERSION, ENVIRONMENT).
 extraEnv: []
 
 # The Postgres dial and the migrations run at boot; period * threshold gives
@@ -186,6 +203,11 @@ mcp:
   enabled: false
   replicaCount: 1
   httpAddr: ":8090"                  # MCP_ADDR
+  # SERVICE_VERSION / ENVIRONMENT: the labels cmd/mcp reports at boot and puts on
+  # its telemetry. serviceVersion empty = the image tag (appVersion when empty),
+  # like the api; set it only to override.
+  serviceVersion: ""
+  environment: "production"
   service:
     type: ClusterIP
     port: 8090
@@ -195,6 +217,53 @@ mcp:
   route:
     enabled: false
     path: "/api/mcp/offer-availability"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  extraEnv: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+# The read-only A2A (Agent2Agent) agent (ADR 0010): cmd/a2a over JSON-RPC,
+# its own Deployment + ClusterIP Service beside the api and the mcp server.
+# Skills: check_availability and feed_outcome (both reads, like the MCP
+# tools). It reads the same Postgres (DATABASE_URL from the same Secret),
+# never dials Kafka, never starts the relay, the consumer or the janitor, and
+# has no auth (fleet-wide revert). A2A carries delegation only; facts between
+# contexts still travel as CloudEvents on Kafka. Off by default: enable per
+# environment.
+a2a:
+  enabled: false
+  replicaCount: 1
+  # A2A_ADDR the binary listens on; keep in sync with service.targetPort.
+  # (8080 is the api and 8090 the mcp server, so 8093.)
+  httpAddr: ":8093"
+  # A2A_AGENT_URL: the absolute URL advertised on the Agent Card. Empty
+  # defaults to this release's in-cluster Service DNS
+  # (http://<release>-a2a.<ns>.svc.cluster.local:8093/); set it to override,
+  # for example with the Kong path when the agent must be reachable off-cluster.
+  agentUrl: ""
+  # SERVICE_VERSION / ENVIRONMENT: the labels cmd/a2a reports at boot and puts
+  # on its telemetry. serviceVersion empty = the image tag (appVersion when
+  # empty), like the api; set it only to override.
+  serviceVersion: ""
+  environment: "production"
+  service:
+    type: ClusterIP
+    port: 8093
+    targetPort: 8093
+  # Kong exposure: /api/a2a/offer-availability -> Service :8093, prefix
+  # rewritten to / (the JSON-RPC root; the Agent Card stays reachable under
+  # the same prefix). Needs the Gateway parentRef from warehouse-infra.
+  route:
+    enabled: false
+    path: "/api/a2a/offer-availability"
     parentRefs:
       - name: ""
         namespace: ""

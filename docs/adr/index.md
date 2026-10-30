@@ -14,3 +14,5 @@ The *Status* column is copied from each ADR's own `## Status` section.
 | [0006](./0006-catalog-gtin-packaging-and-listing-owner.md) | Catalogue GTIN and packaging hierarchy, and the optional owner of a listing | Accepted (2026-10-24) |
 | [0007](./0007-mcp-server-adoption.md) | A read-only MCP server | Accepted (2026-10-24) |
 | [0008](./0008-console-remote.md) | The console remote (offer_availability_mfe) — read-only screens over the existing REST | Accepted (2026-10-24) |
+| [0009](./0009-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26) |
+| [0010](./0010-a2a-inbound-adapter.md) | A2A inbound adapter: a read-only agent with two skills | Accepted (2026-10-29) |

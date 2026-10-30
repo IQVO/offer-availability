@@ -86,7 +86,7 @@ func NewNodeConsumer(brokers []string, groupID string, uc nodeEventUseCase, logg
 func (c *NodeConsumer) Run(ctx context.Context) error {
 	loop := consumeLoop{
 		reader: c.Reader,
-		handle: func(ctx context.Context, msg kafkago.Message) error { return c.HandleMessage(ctx, msg.Value) },
+		handle: c.handleTraced,
 		logger: defaultLogger(c.Logger),
 		name:   "node-topology consumer",
 		retry:  c.Retry,

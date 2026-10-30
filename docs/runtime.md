@@ -17,6 +17,9 @@ no alternative runtime and no log sink.
 | `RETENTION_INTERVAL` | `1h` | How often the janitor deletes idempotency keys older than 24 h and feeds and processed events older than 30 days. |
 | `SHUTDOWN_DRAIN_DELAY` | `5s` | Wait between flipping `/readyz` to 503 and closing the listener; `0` disables. |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error`. |
+| `OTEL_SERVICE_NAME` | `offer-availability` | `service.name` of spans and metrics (ADR 0009). |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | Collector OTLP/gRPC, `host:port` or URL; export never blocks. |
+| `SERVICE_VERSION` / `ENVIRONMENT` | `dev` / `local` | `service.version` / `deployment.environment.name`. |
 
 Configuration errors are raised before anything is opened or bound. An invalid
 optional value logs a warning and falls back to its default.
@@ -85,6 +88,7 @@ capabilities dropped and the `RuntimeDefault` seccomp profile; `/healthz` backs 
 | `database.migrationsExistingSecretKey` | `MIGRATIONS_DATABASE_URL` | Optional `secretKeyRef` (`optional: true`); the binary falls back to `DATABASE_URL`. |
 | `kafka.brokers` | `KAFKA_BROKERS` | Required. |
 | `config.nodeTopologyConsumerGroup` | `NODE_TOPOLOGY_CONSUMER_GROUP` | Required, no default; stable and service-prefixed. |
+| `otel.endpoint`, `otel.serviceName` (`<name>-mcp` for the mcp component, `<name>-a2a` for the a2a component), `image.tag` or appVersion, `environment` | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`, `ENVIRONMENT` | `otel.enabled=false` renders no `OTEL_*` env; `extraEnv` may not set these four. |
 | `config.httpAddr`, `logLevel`, `outboxRelayInterval`, `outboxMaxAttempts`, `retentionInterval`, `shutdownDrainDelay` | `HTTP_ADDR`, `LOG_LEVEL`, `OUTBOX_RELAY_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `RETENTION_INTERVAL`, `SHUTDOWN_DRAIN_DELAY` | Defaults repeat the binary's; the render test checks they agree. |
 
 The chart fails at render for: no database source, no or blank `kafka.brokers`, an empty `config.nodeTopologyConsumerGroup`, any `*_MODE`
