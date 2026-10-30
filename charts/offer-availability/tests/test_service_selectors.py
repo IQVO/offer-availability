@@ -8,8 +8,9 @@ alone selects ALL of them. Every Deployment here carries
 every Service selects on it, so each Service selects EXACTLY ONE Deployment.
 This test fails if that ever stops being true.
 
-This chart has three components when every optional one is on: api (the
-always-on Deployment + Service), mcp (ADR 0007) and frontend (ADR 0008); the
+This chart has four components when every optional one is on: api (the
+always-on Deployment + Service), mcp (ADR 0007), a2a (ADR 0010) and frontend
+(ADR 0008); the
 HPA, Ingress and HTTPRoute are optional and default off. They are enabled
 TOGETHER here.
 
@@ -38,6 +39,7 @@ ENABLE_EVERYTHING = BASE + [
     "--set", "gatewayApi.enabled=true",
     "--set", "ingress.enabled=true",
     "--set", "mcp.enabled=true",
+    "--set", "a2a.enabled=true",
     "--set", "frontend.enabled=true",
 ]
 
@@ -49,6 +51,10 @@ API_ENV = (
 
 # Every env var cmd/mcp reads (main.go, telemetry.go): read-only, never Kafka.
 MCP_ENV = ("MCP_ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL",
+           "SERVICE_VERSION", "ENVIRONMENT", "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT")
+
+# Every env var cmd/a2a reads (main.go, telemetry.go): read-only, never Kafka.
+A2A_ENV = ("A2A_ADDR", "A2A_AGENT_URL", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL",
            "SERVICE_VERSION", "ENVIRONMENT", "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT")
 
 
@@ -91,17 +97,19 @@ def check_components(docs: list[dict], failures: list[str]) -> None:
     services = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Service"}
     deployments = {d["metadata"]["name"]: d for d in docs if d.get("kind") == "Deployment"}
 
-    want_deployments = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-frontend"}
+    want_deployments = {RELEASE, f"{RELEASE}-mcp", f"{RELEASE}-a2a", f"{RELEASE}-frontend"}
     if set(deployments) != want_deployments:
-        failures.append(f"want exactly the api, mcp and frontend Deployments {sorted(want_deployments)}, got {sorted(deployments)}")
+        failures.append(f"want exactly the api, mcp, a2a and frontend Deployments {sorted(want_deployments)}, got {sorted(deployments)}")
     if set(services) != want_deployments:
-        failures.append(f"want exactly the api, mcp and frontend Services {sorted(want_deployments)}, got {sorted(services)}")
+        failures.append(f"want exactly the api, mcp, a2a and frontend Services {sorted(want_deployments)}, got {sorted(services)}")
     if RELEASE not in services:
         failures.append("the api Service was not rendered")
     elif selector_of(services[RELEASE]).get("app.kubernetes.io/component") != "api":
         failures.append("the api Service selector must pin component=api")
     if f"{RELEASE}-mcp" in services and selector_of(services[f"{RELEASE}-mcp"]).get("app.kubernetes.io/component") != "mcp":
         failures.append("the mcp Service selector must pin component=mcp")
+    if f"{RELEASE}-a2a" in services and selector_of(services[f"{RELEASE}-a2a"]).get("app.kubernetes.io/component") != "a2a":
+        failures.append("the a2a Service selector must pin component=a2a")
     if f"{RELEASE}-frontend" in services and selector_of(services[f"{RELEASE}-frontend"]).get("app.kubernetes.io/component") != "frontend":
         failures.append("the frontend Service selector must pin component=frontend")
 
@@ -169,6 +177,20 @@ def check_components(docs: list[dict], failures: list[str]) -> None:
         if sorted(mcp_names) != sorted(MCP_ENV):
             failures.append(f"the mcp Deployment renders env beyond cmd/mcp's contract: {sorted(set(mcp_names) - set(MCP_ENV))}")
 
+    # The a2a Deployment: exactly the env cmd/a2a reads, never Kafka, and the
+    # card URL points at its own Service DNS name.
+    a2a = deployments.get(f"{RELEASE}-a2a")
+    if a2a is not None:
+        a2a_env = {e["name"]: e for e in env_of(a2a)}
+        for want in A2A_ENV:
+            if want not in a2a_env:
+                failures.append(f"the a2a Deployment does not render {want}")
+        if sorted(a2a_env) != sorted(A2A_ENV):
+            failures.append(f"the a2a Deployment renders env beyond cmd/a2a's contract: {sorted(set(a2a_env) - set(A2A_ENV))}")
+        url = a2a_env.get("A2A_AGENT_URL", {}).get("value", "")
+        if not url.startswith(f"http://{RELEASE}-a2a.") or not url.endswith(":8093/"):
+            failures.append(f"A2A_AGENT_URL must default to the a2a Service DNS name on :8093, got {url!r}")
+
     # The frontend Deployment renders NO env at all (ADR 0008).
     frontend = deployments.get(f"{RELEASE}-frontend")
     if frontend is not None and env_of(frontend):
@@ -181,7 +203,7 @@ def main() -> int:
     check_components(render(ENABLE_EVERYTHING), failures)
 
     # Default values must not deploy an HPA, an Ingress, a route or an
-    # optional component (mcp, frontend).
+    # optional component (mcp, a2a, frontend).
     defaults = render(BASE)
     stray = [d["kind"] for d in defaults if d.get("kind") in {"HorizontalPodAutoscaler", "Ingress", "HTTPRoute"}]
     if stray:
@@ -199,8 +221,8 @@ def main() -> int:
             print(f"FAIL: {f}")
         return 1
 
-    print("PASS: every Service (api, mcp, frontend) selects exactly one Deployment; HPA, Ingress and HTTPRoute are off "
-          "by default; mcp and frontend are off by default and render exactly their binaries' env contract")
+    print("PASS: every Service (api, mcp, a2a, frontend) selects exactly one Deployment; HPA, Ingress and HTTPRoute are off "
+          "by default; mcp, a2a and frontend are off by default and render exactly their binaries' env contract")
     return 0
 
 

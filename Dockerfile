@@ -40,8 +40,10 @@ WORKDIR /app
 # filesystem read-only. Logs go to stdout.
 COPY --from=build --chown=app:app /out/ ./
 USER 1000
-# 8080 api, 8090 mcp (cmd/mcp, run by the chart with `command: ["/app/mcp"]`).
-EXPOSE 8080 8090
+# 8080 api, 8090 mcp, 8093 a2a (cmd/mcp and cmd/a2a, run by the chart with
+# `command: ["/app/mcp"]` / `command: ["/app/a2a"]`; the build loop above
+# already builds every cmd/* binary into /app).
+EXPOSE 8080 8090 8093
 # cmd/api is the service's main binary (HTTP on :8080). Additional cmd/*
 # binaries are run by the chart with `command: ["/app/<dirname>"]`.
 ENTRYPOINT ["./api"]

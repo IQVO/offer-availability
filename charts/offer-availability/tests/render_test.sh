@@ -92,7 +92,7 @@ tagged="$(helm template "$release" "$chart_dir" "${base[@]}" --set image.tag=v9.
 [[ "$(env_value "$tagged" OTEL_EXPORTER_OTLP_ENDPOINT)" == "http://collector:4317" ]] || fail "OTEL_EXPORTER_OTLP_ENDPOINT must follow otel.endpoint"
 [[ "$(env_value "$tagged" ENVIRONMENT)" == "staging" ]] || fail "ENVIRONMENT must follow environment"
 # otel.enabled=false renders no OTEL_* env (SERVICE_VERSION stays: it also labels the build).
-otel_off="$(helm template "$release" "$chart_dir" "${base[@]}" --set otel.enabled=false --set mcp.enabled=true)"
+otel_off="$(helm template "$release" "$chart_dir" "${base[@]}" --set otel.enabled=false --set mcp.enabled=true --set a2a.enabled=true)"
 if grep -q 'name: OTEL_' <<<"$otel_off"; then fail "otel.enabled=false must render no OTEL_* env in any component"; fi
 grep -q 'name: SERVICE_VERSION$' <<<"$otel_off" || fail "SERVICE_VERSION must still render with otel.enabled=false"
 # The values are chart-owned: extraEnv may not set them a second time.
@@ -103,6 +103,9 @@ for owned in OTEL_SERVICE_NAME OTEL_EXPORTER_OTLP_ENDPOINT SERVICE_VERSION ENVIR
   err="$(helm template "$release" "$chart_dir" "${base[@]}" --set mcp.enabled=true --set "mcp.extraEnv[0].name=$owned" --set 'mcp.extraEnv[0].value=x' 2>&1)" \
     && fail "mcp.extraEnv must not be able to set $owned"
   grep -qF "mcp.extraEnv sets $owned" <<<"$err" || fail "the refusal for mcp.extraEnv $owned does not name it: $err"
+  err="$(helm template "$release" "$chart_dir" "${base[@]}" --set a2a.enabled=true --set "a2a.extraEnv[0].name=$owned" --set 'a2a.extraEnv[0].value=x' 2>&1)" \
+    && fail "a2a.extraEnv must not be able to set $owned"
+  grep -qF "a2a.extraEnv sets $owned" <<<"$err" || fail "the refusal for a2a.extraEnv $owned does not name it: $err"
 done
 
 # --- the mandatory configuration is rendered from values ------------------------------
@@ -199,9 +202,9 @@ expect_ok "a 45s grace period with a 20s drain" "${base[@]}" --set config.shutdo
 expect_ok "a zero drain delay with a 25s grace period" "${base[@]}" --set config.shutdownDrainDelay=0 --set terminationGracePeriodSeconds=25
 expect_refusal "an unparsable drain delay" "config.shutdownDrainDelay" "${base[@]}" --set config.shutdownDrainDelay=soon
 
-# --- optional components (ADR 0007 mcp, ADR 0008 web remote) ---------------------------
+# --- optional components (ADR 0007 mcp, ADR 0010 a2a, ADR 0008 web remote) -------------
 # Every optional component is OFF by default: a default render is the api alone.
-for c in mcp frontend; do
+for c in mcp a2a frontend; do
   if grep -q "app.kubernetes.io/component: $c\$" <<<"$render_all"; then
     fail "the $c component must not render while its enabled flag is false"
   fi
@@ -252,6 +255,60 @@ if grep -q 'kind: HTTPRoute' <<<"$(helm template "$release" "$chart_dir" "${base
   fail "the mcp HTTPRoute must stay off while mcp.route.enabled is false"
 fi
 
+# a2a: its own env, never the api ConfigMap, never Kafka (ADR 0010). The agent is
+# read-only like the mcp server, so it gets no KAFKA_BROKERS / EVENT_PUBLISHER either.
+a2a_dep="$(helm template "$release" "$chart_dir" "${base[@]}" --set a2a.enabled=true --show-only templates/a2a-deployment.yaml)"
+grep -q 'app.kubernetes.io/component: a2a' <<<"$a2a_dep" || fail "the a2a Deployment was not rendered with a2a.enabled=true"
+grep -q 'command: \["/app/a2a"\]' <<<"$a2a_dep" || fail "the a2a Deployment must run /app/a2a"
+if grep -q 'configMapRef:' <<<"$a2a_dep"; then fail "a2a-deployment.yaml must not mount the api ConfigMap"; fi
+if grep -Eq 'name: (KAFKA_BROKERS|EVENT_PUBLISHER|OUTBOX_[A-Z_]+|[A-Z]+_CONSUMER_GROUP)$' <<<"$a2a_dep"; then
+  fail "the a2a Deployment must not get Kafka/relay/consumer env (read-only, never dials Kafka)"
+fi
+# shellcheck disable=SC2207
+a2a_vars=($(binary_env_of "$repo_dir/cmd/a2a/main.go" "$repo_dir/cmd/a2a/telemetry.go"))
+(( ${#a2a_vars[@]} == 8 )) || fail "found ${#a2a_vars[@]} env literals in cmd/a2a (${a2a_vars[*]}), want the 5 of A2A_ADDR/A2A_AGENT_URL/LOG_LEVEL/DATABASE_URL/MIGRATIONS_DATABASE_URL plus OTEL_SERVICE_NAME/SERVICE_VERSION/OTEL_EXPORTER_OTLP_ENDPOINT; the scan is looking in the wrong place"
+assert_env_rendered "$a2a_dep" "the a2a Deployment" "${a2a_vars[@]}" ENVIRONMENT
+# Every variable cmd/a2a refuses to boot without ("<VAR> is required") is rendered: the
+# regex allows digits, or A2A_AGENT_URL would be read as A_AGENT_URL and the check would
+# fail for the wrong reason.
+# shellcheck disable=SC2207
+a2a_required=($(grep -ohE '[A-Z][A-Z0-9_]+ is required' "$repo_dir"/cmd/a2a/*.go | sed -E 's/ is required//' | sort -u))
+[[ " ${a2a_required[*]} " == *" A2A_AGENT_URL "* && " ${a2a_required[*]} " == *" DATABASE_URL "* ]] \
+  || fail "the mandatory-env scan of cmd/a2a found (${a2a_required[*]}), want DATABASE_URL and A2A_AGENT_URL"
+assert_env_rendered "$a2a_dep" "the a2a Deployment (mandatory env)" "${a2a_required[@]}"
+# The Agent Card URL defaults to the in-cluster Service DNS (namespace-derived, so match the
+# shape) and is overridable. The assignments end in `|| true`: under `set -e` a missing
+# variable would abort the script silently, before the message below could print.
+a2a_url="$(env_value "$a2a_dep" A2A_AGENT_URL || true)"
+[[ "$a2a_url" =~ ^http://offer-availability-a2a\.[a-z0-9-]+\.svc\.cluster\.local:8093/$ ]] \
+  || fail "A2A_AGENT_URL must default to http://<release>-a2a.<ns>.svc.cluster.local:8093/, got '$a2a_url'"
+a2a_ns="$(helm template "$release" "$chart_dir" --namespace warehouse-systems "${base[@]}" --set a2a.enabled=true --show-only templates/a2a-deployment.yaml)"
+[[ "$(env_value "$a2a_ns" A2A_AGENT_URL || true)" == "http://offer-availability-a2a.warehouse-systems.svc.cluster.local:8093/" ]] \
+  || fail "A2A_AGENT_URL must follow the release namespace"
+a2a_over="$(helm template "$release" "$chart_dir" "${base[@]}" --set a2a.enabled=true --set a2a.agentUrl=https://agents.example/api/a2a/offer-availability/ --show-only templates/a2a-deployment.yaml)"
+[[ "$(env_value "$a2a_over" A2A_AGENT_URL || true)" == "https://agents.example/api/a2a/offer-availability/" ]] \
+  || fail "a2a.agentUrl must override A2A_AGENT_URL"
+grep -qE 'getenv\("A2A_ADDR", ":8093"\)' "$repo_dir/cmd/a2a/main.go" \
+  && [[ "$(env_value "$a2a_dep" A2A_ADDR || true)" == ":8093" ]] || fail "the chart's A2A_ADDR default differs from cmd/a2a's"
+[[ "$(env_value "$a2a_dep" OTEL_SERVICE_NAME || true)" == "offer-availability-a2a" ]] || fail "the a2a component must export as <otel.serviceName>-a2a"
+[[ "$(env_value "$a2a_dep" OTEL_EXPORTER_OTLP_ENDPOINT || true)" == "$otel_endpoint" ]] || fail "the a2a component must export to otel.endpoint"
+[[ "$(env_value "$a2a_dep" SERVICE_VERSION || true)" == "0.1.0" ]] || fail "the a2a SERVICE_VERSION must default to the image tag / appVersion, like the api"
+[[ "$(env_value "$a2a_dep" ENVIRONMENT || true)" == "production" ]] || fail "ENVIRONMENT must come from a2a.environment"
+a2a_named="$(helm template "$release" "$chart_dir" "${base[@]}" --set a2a.enabled=true --set otel.serviceName=offers --set a2a.serviceVersion=dev --show-only templates/a2a-deployment.yaml)"
+[[ "$(env_value "$a2a_named" OTEL_SERVICE_NAME || true)" == "offers-a2a" ]] || fail "the a2a service name must follow otel.serviceName"
+[[ "$(env_value "$a2a_named" SERVICE_VERSION || true)" == "dev" ]] || fail "SERVICE_VERSION must come from a2a.serviceVersion"
+# The a2a Service and route render together with the component; the route rewrites to the
+# JSON-RPC root, so the Agent Card stays reachable under the same Kong prefix.
+a2a_all="$(helm template "$release" "$chart_dir" "${base[@]}" --set a2a.enabled=true --set a2a.route.enabled=true \
+  --show-only templates/a2a-service.yaml --show-only templates/a2a-route.yaml)"
+grep -q 'kind: Service' <<<"$a2a_all" || fail "the a2a Service was not rendered with a2a.enabled=true"
+grep -q 'kind: HTTPRoute' <<<"$a2a_all" || fail "the a2a HTTPRoute was not rendered with a2a.route.enabled=true"
+grep -q 'port: 8093' <<<"$a2a_all" || fail "the a2a Service and route must use port 8093"
+grep -q 'value: /api/a2a/offer-availability$' <<<"$a2a_all" || fail "the a2a HTTPRoute must match /api/a2a/offer-availability"
+grep -q 'replacePrefixMatch: /$' <<<"$a2a_all" || fail "the a2a HTTPRoute must rewrite the prefix to /"
+if grep -q 'kind: HTTPRoute' <<<"$(helm template "$release" "$chart_dir" "${base[@]}" --set a2a.enabled=true)"; then
+  fail "the a2a HTTPRoute must stay off while a2a.route.enabled is false"
+fi
 # The web remote: its own nginx Deployment + ClusterIP Service, no env at all,
 # and no route in this chart (the Nginx web gateway owns /mfes/offer-availability/).
 frontend_dep="$(helm template "$release" "$chart_dir" "${base[@]}" --set frontend.enabled=true --show-only templates/frontend-deployment.yaml)"
@@ -264,7 +321,7 @@ if grep -Eq 'name: (DATABASE_URL|KAFKA_BROKERS)$' <<<"$frontend_dep"; then fail 
 # ALL optional components render TOGETHER (ct lint's all-components values file).
 everything=(-f "$chart_dir/ci/all-components-values.yaml")
 together="$(helm template "$release" "$chart_dir" "${base[@]}" "${everything[@]}")"
-for component in api mcp frontend; do
+for component in api mcp a2a frontend; do
   grep -q "app.kubernetes.io/component: $component\$" <<<"$together" || fail "the full render lacks the $component component"
 done
 if grep -E 'kind: (Ingress|HTTPRoute)' <<<"$together" | grep -q frontend; then
