@@ -82,7 +82,7 @@ Values, grace period and the chart tests: [docs/runtime.md](docs/runtime.md#depl
 ## Observability
 
 Logs, metrics and traces follow the fleet standard ([ADR 0009](docs/adr/0009-fleet-observability-standard.md)): JSON logs on stdout carry `trace_id`/`span_id`
-and a `request_id`; `cmd/api` and `cmd/mcp` export OTLP/gRPC to the Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`, `ENVIRONMENT`;
+and a `request_id`; `cmd/api`, `cmd/mcp` and `cmd/a2a` export OTLP/gRPC to the Collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`, `ENVIRONMENT`;
 export never blocks, so no Collector costs telemetry, nothing else) with HTTP request duration, Go runtime metrics and the business counter
 `availability.inventory_feeds.applied` (`outcome`, `reason`); the trace continues across Kafka in the `traceparent` header of each published event and is picked up
 by the node-topology consumer. The chart's `otel.*` values render the env.
@@ -109,6 +109,31 @@ go run ./cmd/mcp                                        # listens on :8090 (MCP_
 
 In the cluster it is the optional `mcp` chart component (`--set mcp.enabled=true`, plus `mcp.route.enabled` for the Kong route `/api/mcp/offer-availability` → `/mcp`).
 
+## A2A agent
+
+A third, read-only binary — `cmd/a2a` — lets another agent *delegate a goal* to this context over the
+[Agent2Agent protocol](https://a2a-protocol.org) ([ADR 0010](docs/adr/0010-a2a-inbound-adapter.md)): JSON-RPC at `/` and `/a2a`, the Agent Card at
+`/.well-known/agent-card.json`, an open `/healthz` on `A2A_ADDR` (default `:8093`), no auth (fleet-wide revert), no Kafka, no writes — the MCP surface is
+read-only, so the agent is too. A2A carries delegation only; facts still leave as CloudEvents from `cmd/api`.
+
+| Skill | Goal | Built from |
+| --- | --- | --- |
+| `check_availability(catalogItemId?, nodeId?, limit?, after?)` (at least one filter) | where an item is sold and how much is available (the item plus its listings) | `GET /catalog/{catalogItemId}` + `GET /listings` |
+| `feed_outcome(feedId)` | what became of one vendor inventory feed | `GET /inventory-feeds/{feedId}` |
+
+Send `{"skill":"check_availability","arguments":{"catalogItemId":"item-1"}}` as a data part (or a text part holding that JSON). Rejections are answered in the
+message as RFC 7807-shaped problems with the REST slugs and statuses (`not-found` 404, `validation-failed` 422, plus `invalid-argument`, `unknown-skill`
+and `malformed-skill-request` 400), never as JSON-RPC errors.
+
+```sh
+export DATABASE_URL=postgres://user:***@localhost:5432/offer_availability?sslmode=disable
+export A2A_AGENT_URL=http://localhost:8093/               # the URL the Agent Card advertises (mandatory)
+go run ./cmd/a2a                                          # listens on :8093 (A2A_ADDR)
+```
+
+In the cluster it is the optional `a2a` chart component (`--set a2a.enabled=true`; `A2A_AGENT_URL` defaults to the in-cluster Service DNS, override it with
+`a2a.agentUrl`; `a2a.route.enabled` adds the Kong route `/api/a2a/offer-availability` → `/`).
+
 ## Web console remote
 
 `web/` is the `offer_availability_mfe` Module Federation remote for the warehouse-console
@@ -134,7 +159,7 @@ docker build --build-context uikit=../../warehouse-ui-kit -t warehouse/offer-ava
 | `make vuln` | govulncheck |
 
 Layout: `internal/domain/{shared,catalog,listing,feed,nodestatus}` (pure Go), `internal/application/{ports,views,usecases,repository,outbox}`,
-`internal/adapters/inbound/{http,kafka}` (chi, the node-topology consumer), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
-`cmd/api`, `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**` never imports them.
+`internal/adapters/inbound/{http,kafka,mcp,a2a}` (chi, the node-topology consumer, the read-only MCP and A2A adapters), `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`,
+`cmd/{api,mcp,a2a}`, `features/` (godog BDD). The `memory` and `repocontract` packages are test doubles; `cmd/**` never imports them.
 
 Decisions: [docs/adr/](docs/adr/index.md). Packaging checklist: [docs/before-first-release.md](docs/before-first-release.md).
