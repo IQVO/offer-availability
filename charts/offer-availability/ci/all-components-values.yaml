@@ -1,5 +1,5 @@
 # Used by `helm lint` / `ct lint`: every optional value and component set at
-# once (api + mcp + web remote). Kafka and the consumer group are mandatory
+# once (api + mcp + a2a + web remote). Kafka and the consumer group are mandatory
 # even with every optional component on: the api always runs.
 database:
   existingSecret: "offer-availability-db"
@@ -20,6 +20,14 @@ autoscaling:
   api:
     enabled: true
 mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http
+a2a:
   enabled: true
   route:
     enabled: true

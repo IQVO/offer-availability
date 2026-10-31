@@ -53,6 +53,12 @@ type outcome struct {
 // The events leave in the order: one ListingAvailabilityChanged per changed
 // listing, then InventoryFeedApplied.
 func (uc *ApplyInventoryFeed) Execute(ctx context.Context, cmd ApplyInventoryFeedCommand) (views.InventoryFeed, error) {
+	v, err := uc.execute(ctx, cmd)
+	uc.recordOutcome(ctx, v, err)
+	return v, err
+}
+
+func (uc *ApplyInventoryFeed) execute(ctx context.Context, cmd ApplyInventoryFeedCommand) (views.InventoryFeed, error) {
 	sub, err := feed.NewSubmission(cmd.FeedID, cmd.NodeID, cmd.FullUpdate, cmd.AsOf, cmd.Lines)
 	if err != nil {
 		return views.InventoryFeed{}, err

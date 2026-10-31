@@ -33,7 +33,26 @@ type Deps struct {
 	UoW      ports.UnitOfWork
 	Clock    ports.Clock
 	IDs      ports.IDGenerator
+	// Metrics records the business outcome of each inventory feed attempt; nil
+	// records nothing, so unit tests need no wiring.
+	Metrics ports.FeedMetrics
 }
+
+// metrics returns the configured FeedMetrics or a no-op.
+func (d Deps) metrics() ports.FeedMetrics {
+	if d.Metrics != nil {
+		return d.Metrics
+	}
+	return noMetrics{}
+}
+
+// noMetrics is the FeedMetrics of a Deps without one.
+type noMetrics struct{}
+
+func (noMetrics) FeedApplied(context.Context)          {}
+func (noMetrics) FeedSuperseded(context.Context)       {}
+func (noMetrics) FeedFailed(context.Context, string)   {}
+func (noMetrics) FeedRejected(context.Context, string) {}
 
 // writer is what every command embeds.
 type writer struct{ Deps }

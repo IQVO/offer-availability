@@ -146,3 +146,27 @@ type IDGenerator interface {
 	NewCatalogItemID() catalog.ID
 	NewListingID() listing.ID
 }
+
+// FeedMetrics records the business outcome of every inventory feed attempt (the
+// Tier 2 metric of the fleet metrics convention; ApplyInventoryFeed is the
+// command this context exists for). The use case calls exactly one method per
+// attempt:
+//
+//   - FeedApplied: the feed was applied and its listings changed;
+//   - FeedSuperseded: a newer feed of the node had already been applied, so the
+//     feed was stored as SUPERSEDED and changed nothing;
+//   - FeedFailed: the feed was stored as FAILED because a line broke an
+//     invariant; reason is the problem slug ("listing-not-on-node",
+//     "negative-availability");
+//   - FeedRejected: the request was refused and nothing was recorded; reason is
+//     the problem slug ("validation-failed", "feed-already-applied",
+//     "concurrent-update", "internal-error", ...).
+//
+// The implementation lives in internal/adapters/outbound/telemetry; a nil
+// Deps.Metrics records nothing.
+type FeedMetrics interface {
+	FeedApplied(ctx context.Context)
+	FeedSuperseded(ctx context.Context)
+	FeedFailed(ctx context.Context, reason string)
+	FeedRejected(ctx context.Context, reason string)
+}
