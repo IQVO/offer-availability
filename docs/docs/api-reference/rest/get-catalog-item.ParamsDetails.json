@@ -1,0 +1,1 @@
+{"parameters":[{"name":"catalogItemId","in":"path","required":true,"schema":{"type":"string"}}]}
