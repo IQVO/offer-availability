@@ -1,0 +1,70 @@
+---
+id: create-listing
+title: "Create a listing (CreateListing)"
+description: "Creates the listing of one catalogue item on one node and publishes ListingCreated. The listing starts LIVE when the node is ACTIVE in the local node status view. Otherwise (node proposed, suspended, retired or not yet known) it starts SUPPRESSED with reason NODE_NOT_SELLABLE; for a DISCONTINUED item it starts SUPPRESSED with reason DISCONTINUED (Gap Register G24). Its availability starts at 0, basis UNKNOWN, with no asOf."
+sidebar_label: "Create a listing (CreateListing)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/offer-availability-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Create a listing (CreateListing)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/listings"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Creates the listing of one catalogue item on one node and publishes ListingCreated. The listing starts LIVE when the node is ACTIVE in the local node status view. Otherwise (node proposed, suspended, retired or not yet known) it starts SUPPRESSED with reason NODE_NOT_SELLABLE; for a DISCONTINUED item it starts SUPPRESSED with reason DISCONTINUED (Gap Register G24). Its availability starts at 0, basis UNKNOWN, with no asOf.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./create-listing.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./create-listing.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./create-listing.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      
