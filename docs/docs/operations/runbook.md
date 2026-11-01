@@ -28,7 +28,7 @@ Three binaries, three independent deployables (`charts/offer-availability`):
 
 The `api` process (`cmd/api/run.go`) runs four things at once:
 
-- **REST API** on `HTTP_ADDR`: the 8 operations of `apis/openapi.yaml` (nine resource paths) plus `/healthz` and `/readyz`
+- **REST API** on `HTTP_ADDR`: the 10 operations of `apis/openapi.yaml` (nine resource paths) plus `/healthz` and `/readyz`
   (`internal/adapters/inbound/http/server.go`). No authentication. Every state-changing route requires an
   `Idempotency-Key` header (24 h replay window).
 - **Outbox relay** (`cmd/api/workers.go` `startOutboxRelay` over `internal/adapters/outbound/outbox/relay.go`): drains
@@ -142,6 +142,9 @@ the pod from booting (`ping postgres` / `run migrations` errors in the log, then
 - Events are written in the same transaction as the aggregates and published later, so a write is accepted while Kafka is
   down; `outbox_events.published_at IS NULL` rows wait and are published, in id order, when the broker is back.
 - Delivery is at-least-once with a stable CloudEvents `id`; consumers deduplicate.
+- Nothing deletes `outbox_events`: published rows stay (`published_at` set). The retention janitor purges only
+  `idempotency_keys`, `inventory_feeds` and `processed_events`, so the outbox table grows with every event; size and
+  archive it as an operator task.
 - A row that failed `OUTBOX_MAX_ATTEMPTS` times (default 20) is excluded from claims, logged once at ERROR with id, topic,
   type and key, and stays in the table with `attempts` and `last_error`. While a row is excluded, later events of the same
   aggregate can overtake it. Fix the cause, then re-arm it (see "Operational actions").
