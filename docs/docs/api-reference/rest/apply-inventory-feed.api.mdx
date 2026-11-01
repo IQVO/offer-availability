@@ -1,0 +1,70 @@
+---
+id: apply-inventory-feed
+title: "Apply an inventory feed for one node (ApplyInventoryFeed)"
+description: "In-org call from vendor-connectivity. The feed is applied in ONE transaction (at most 10000 lines per node; larger feeds are split by the vendor). Outcomes (Gap Register G23): APPLIED when every line names a listing of the node and no quantity is negative (a line whose asOf is not after the listing's current asOf is skipped and counted as stale, it does not fail the feed; one ListingAvailabilityChanged per applied line and one InventoryFeedApplied); SUPERSEDED when the feed's asOf is older than the last applied feed of that node (nothing applied, no event); FAILED when a line breaks an invariant (listing-not-on-node or negative-availability: nothing applied, no event, the feed row is kept and the request is answered 422). A full feed (fullUpdate true) sets availableQty 0, keeping the basis and stamping the feed's asOf, on every listing of the node it omits. A FAILED feedId may be sent again; an APPLIED or SUPERSEDED feedId is refused with feed-already-applied."
+sidebar_label: "Apply an inventory feed for one node (ApplyInventoryFeed)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/offer-availability-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Apply an inventory feed for one node (ApplyInventoryFeed)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/inventory-feeds"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+In-org call from vendor-connectivity. The feed is applied in ONE transaction (at most 10000 lines per node; larger feeds are split by the vendor). Outcomes (Gap Register G23): APPLIED when every line names a listing of the node and no quantity is negative (a line whose asOf is not after the listing's current asOf is skipped and counted as stale, it does not fail the feed; one ListingAvailabilityChanged per applied line and one InventoryFeedApplied); SUPERSEDED when the feed's asOf is older than the last applied feed of that node (nothing applied, no event); FAILED when a line breaks an invariant (listing-not-on-node or negative-availability: nothing applied, no event, the feed row is kept and the request is answered 422). A full feed (fullUpdate true) sets availableQty 0, keeping the basis and stamping the feed's asOf, on every listing of the node it omits. A FAILED feedId may be sent again; an APPLIED or SUPERSEDED feedId is refused with feed-already-applied.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./apply-inventory-feed.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./apply-inventory-feed.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./apply-inventory-feed.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

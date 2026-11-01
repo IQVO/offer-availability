@@ -1,0 +1,70 @@
+---
+id: create-catalog-item
+title: "Create a catalogue item (CreateCatalogItem)"
+description: "Creates an ACTIVE catalogue item under a new catalogItemId and publishes CatalogItemCreated (with identifiers.gtin when given). Dimensions and weight must be positive. identifiers.gtin is optional and checked (GS1 mod-10); a GTIN another item or pack level holds is 409 gtin-already-assigned."
+sidebar_label: "Create a catalogue item (CreateCatalogItem)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/offer-availability-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Create a catalogue item (CreateCatalogItem)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/catalog-items"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Creates an ACTIVE catalogue item under a new catalogItemId and publishes CatalogItemCreated (with identifiers.gtin when given). Dimensions and weight must be positive. identifiers.gtin is optional and checked (GS1 mod-10); a GTIN another item or pack level holds is 409 gtin-already-assigned.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./create-catalog-item.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./create-catalog-item.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./create-catalog-item.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

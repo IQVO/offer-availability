@@ -1,0 +1,20 @@
+---
+id: listings
+title: "Listings"
+description: "Listings"
+custom_edit_url: null
+---
+
+
+
+One listing per (catalogue item, node) and its availability (aggregate Listing).
+
+
+
+```mdx-code-block
+import DocCardList from '@theme/DocCardList';
+import {useCurrentSidebarCategory} from '@docusaurus/theme-common';
+
+<DocCardList items={useCurrentSidebarCategory().items}/>
+```
+      

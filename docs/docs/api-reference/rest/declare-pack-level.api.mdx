@@ -1,0 +1,70 @@
+---
+id: declare-pack-level
+title: "Declare a pack level of a catalogue item (DeclarePackLevel)"
+description: "Declares the pack level (EACH, INNER, CASE or PALLET) identified by a GS1 GTIN and publishes CatalogItemPackagingDeclared (ADR 0006). unitsPerPack is in eaches: 1 for EACH, at least 2 above it and at least twice the child's. A level above EACH names the childGtin of an active lower level of the same item. The unitsPerPack of a GTIN is immutable: re-declaring an active GTIN with another count is 409 pack-quantity-immutable (a new count is a new GTIN). Declaring a NEW GTIN at a level that has an active one retires the old level (CatalogItemPackLevelRetired, then CatalogItemPackagingDeclared, one aggregate version). The identical declaration changes nothing and publishes nothing; new dimsMm or grossWeightG on an active GTIN are updated in place. A GTIN identifies one item or pack level, forever (409 gtin-already-assigned). A DISCONTINUED item takes no packaging change (409 illegal-transition)."
+sidebar_label: "Declare a pack level of a catalogue item (DeclarePackLevel)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "put api-method"
+info_path: docs/api-reference/rest/offer-availability-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Declare a pack level of a catalogue item (DeclarePackLevel)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"put"}
+  path={"/catalog-items/{catalogItemId}/packaging/{level}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Declares the pack level (EACH, INNER, CASE or PALLET) identified by a GS1 GTIN and publishes CatalogItemPackagingDeclared (ADR 0006). unitsPerPack is in eaches: 1 for EACH, at least 2 above it and at least twice the child's. A level above EACH names the childGtin of an active lower level of the same item. The unitsPerPack of a GTIN is immutable: re-declaring an active GTIN with another count is 409 pack-quantity-immutable (a new count is a new GTIN). Declaring a NEW GTIN at a level that has an active one retires the old level (CatalogItemPackLevelRetired, then CatalogItemPackagingDeclared, one aggregate version). The identical declaration changes nothing and publishes nothing; new dimsMm or grossWeightG on an active GTIN are updated in place. A GTIN identifies one item or pack level, forever (409 gtin-already-assigned). A DISCONTINUED item takes no packaging change (409 illegal-transition).
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./declare-pack-level.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./declare-pack-level.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./declare-pack-level.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

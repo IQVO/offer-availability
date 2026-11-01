@@ -21,21 +21,21 @@ This project is a domain-driven design study. It is not associated with, endorse
 
 ## Documentation
 
-This repo has no docs site of its own. The context's design lives on the
-warehouse-docs retail-network pages:
+The documentation site is published at **<https://iqvo.github.io/offer-availability/>**. Its
+sources are in [`docs/`](docs/) (Docusaurus; `cd docs && npm ci && npm run build`). The network-wide
+view of this context is on the aggregator,
+[warehouse-docs](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability).
 
 | Area | Pages |
 |---|---|
-| Retail network | [Network overview](https://iqvo.github.io/warehouse-docs/network) |
-| This context | [Index / service facts](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability), [Business context](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/business-context), [Domain events](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/domain-events), [Use cases](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/use-cases) |
-| DDD artifact pack | [Ubiquitous language](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/ubiquitous-language), [Context map](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/context-map), [Core domain chart](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/core-domain-chart), [Bounded context canvas](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/bounded-context-canvas), [Aggregate design canvas](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/aggregate-design-canvas), [EventStorming](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/eventstorming), [Class diagram](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/class-diagram), [Sequence diagrams](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/sequence-diagrams), [ER diagram](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/entity-relationship), [Domain message flow](https://iqvo.github.io/warehouse-docs/network/contexts/offer-availability/domain-message-flow) |
-| Decisions | [Network ADRs](https://iqvo.github.io/warehouse-docs/network/adr) |
-
-In-tree: [`docs/adr/`](docs/adr/index.md) (decisions, index),
-[`docs/runtime.md`](docs/runtime.md) (settings, probes, shutdown order,
-outbox runbook), [`docs/operations/runbook.md`](docs/operations/runbook.md),
-[`docs/before-first-release.md`](docs/before-first-release.md) (packaging
-checklist).
+| Overview | [Introduction](https://iqvo.github.io/offer-availability/docs/overview/introduction), [Architecture](https://iqvo.github.io/offer-availability/docs/overview/architecture), [Runtime](https://iqvo.github.io/offer-availability/docs/overview/runtime), [Quickstart](https://iqvo.github.io/offer-availability/docs/overview/quickstart) |
+| Operations | [Configuration](https://iqvo.github.io/offer-availability/docs/operations/configuration), [Runbook](https://iqvo.github.io/offer-availability/docs/operations/runbook), [Observability](https://iqvo.github.io/offer-availability/docs/operations/observability), [Troubleshooting](https://iqvo.github.io/offer-availability/docs/operations/troubleshooting), [Before the first release](https://iqvo.github.io/offer-availability/docs/operations/before-first-release) |
+| Development | [Testing](https://iqvo.github.io/offer-availability/docs/development/testing) |
+| Domain-driven design | [Ubiquitous language](https://iqvo.github.io/offer-availability/docs/ddd/ubiquitous-language), [Use cases](https://iqvo.github.io/offer-availability/docs/ddd/use-cases), [Subdomain classification](https://iqvo.github.io/offer-availability/docs/ddd/subdomain-classification), [DDD artifacts index](https://iqvo.github.io/offer-availability/docs/ddd/ddd-artifacts) |
+| DDD artifact pack | [Core domain chart](https://iqvo.github.io/offer-availability/docs/ddd/core-domain-chart), [Bounded context canvas](https://iqvo.github.io/offer-availability/docs/ddd/bounded-context-canvas), [Context map](https://iqvo.github.io/offer-availability/docs/ddd/context-map), [Aggregate design canvas](https://iqvo.github.io/offer-availability/docs/ddd/aggregate-design-canvas), [Domain message flow](https://iqvo.github.io/offer-availability/docs/ddd/domain-message-flow), [EventStorming](https://iqvo.github.io/offer-availability/docs/ddd/eventstorming), [Class diagram](https://iqvo.github.io/offer-availability/docs/ddd/class-diagram), [Entity-relationship](https://iqvo.github.io/offer-availability/docs/ddd/entity-relationship), [Sequence diagrams](https://iqvo.github.io/offer-availability/docs/ddd/sequence-diagrams), [Domain events](https://iqvo.github.io/offer-availability/docs/ddd/domain-events) |
+| API reference | [Overview (REST, events, MCP, A2A)](https://iqvo.github.io/offer-availability/docs/api-reference), [REST reference](https://iqvo.github.io/offer-availability/docs/api-reference/rest/offer-availability-api), [Event catalogue](https://iqvo.github.io/offer-availability/docs/api-reference/events) |
+| Ecosystem | [Integration](https://iqvo.github.io/offer-availability/docs/ecosystem/integration), [MCP tools](https://iqvo.github.io/offer-availability/docs/mcp/tools) |
+| Decisions | [ADR index](https://iqvo.github.io/offer-availability/docs/adr) (the ADR files are in [`docs/adr/`](docs/adr/index.md)) |
 
 ---
 
@@ -115,7 +115,7 @@ export NODE_TOPOLOGY_CONSUMER_GROUP=offer-availability-local
 go run ./cmd/api                                       # listens on :8080 (HTTP_ADDR)
 ```
 
-All settings, the probes, the shutdown order and the outbox runbook: [docs/runtime.md](docs/runtime.md).
+All settings, the probes, the shutdown order and the outbox runbook: [Configuration](https://iqvo.github.io/offer-availability/docs/operations/configuration), [Runtime](https://iqvo.github.io/offer-availability/docs/overview/runtime) and the [Runbook](https://iqvo.github.io/offer-availability/docs/operations/runbook).
 
 ### Configuration
 
