@@ -20,7 +20,7 @@ Guides: `python3 scripts/harness/repo_lint.py`, `python3 scripts/harness/guide_l
 Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and `NODE_TOPOLOGY_CONSUMER_GROUP` are mandatory (boot error naming the variable, raised before the listener binds; `MIGRATIONS_DATABASE_URL` is an optional direct DSN, falls back to `DATABASE_URL`).
 Three loops are always on: the outbox relay (`OUTBOX_MAX_ATTEMPTS` default 20, 0 = unlimited; `OUTBOX_RELAY_INTERVAL` 1s), the node-topology consumer, the retention janitor (`RETENTION_INTERVAL` 1h); the process exits non-zero when one ends on its own.
 `/healthz` = liveness; `/readyz` = drain gate + Postgres ping + Kafka metadata request with an EMPTY non-nil topic list (fresh connection per check; it never needs the topic to exist).
-Shutdown: /readyz 503, `SHUTDOWN_DRAIN_DELAY` (5s), drain HTTP, stop the loops, close pool. cmd/** never imports internal/adapters/outbound/memory or repocontract. No authentication on REST. See docs/runtime.md.
+Shutdown: /readyz 503, `SHUTDOWN_DRAIN_DELAY` (5s), drain HTTP, stop the loops, close pool. cmd/** never imports internal/adapters/outbound/memory or repocontract. No authentication on REST. See docs/docs/overview/runtime.md.
 
 ## REST
 chi router implementing every operation of apis/openapi.yaml (8 routes) plus /healthz, /readyz. Every state-changing route takes `Idempotency-Key` (table `idempotency_keys`, key = (route, key), 24h, replays the first response, same key + other request = 422 `idempotency-key-reused`).
@@ -40,6 +40,6 @@ A feed is ONE transaction across many listings (G23): a stale line is skipped an
 
 ## Workflow
 GitFlow: feature/* -> PR into develop, CI green before merge, never push develop or main. lefthook: pre-commit fmt/vet/lint, pre-push `make check`. Commit and push after each step.
-Deployment: `charts/offer-availability` (one `api` component; refuses to render without a database source, `kafka.brokers`, `config.nodeTopologyConsumerGroup`; tests in `charts/offer-availability/tests`, see docs/runtime.md). Open follow-up: repository secrets (docs/before-first-release.md row 11).
+Deployment: `charts/offer-availability` (one `api` component; refuses to render without a database source, `kafka.brokers`, `config.nodeTopologyConsumerGroup`; tests in `charts/offer-availability/tests`, see docs/docs/overview/runtime.md). Open follow-up: repository secrets (docs/docs/operations/before-first-release.md row 11).
 
 A2A: `cmd/a2a` (port 8093) is this context's read-only Agent2Agent agent, skills `check_availability` (read), `feed_outcome` (read), decided in `docs/adr/0010-a2a-inbound-adapter.md`; delegation only (facts stay CloudEvents on Kafka), unauthenticated like REST and MCP; rules in `.claude/rules/fleet/a2a.md`.
