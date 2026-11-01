@@ -140,7 +140,7 @@ func recoverer(next http.Handler) http.Handler {
 				if p == http.ErrAbortHandler { //nolint:errorlint // the sentinel is compared by identity on purpose
 					panic(p)
 				}
-				slog.ErrorContext(r.Context(), "panic in handler", "panic", p, "method", r.Method, "path", r.URL.Path)
+				slog.ErrorContext(r.Context(), "panic in handler", "panic", p, "method", sanitizeLog(r.Method), "path", sanitizeLog(r.URL.Path))
 				writeProblem(w, r, internalProblem, "an unexpected error occurred")
 			}
 		}()
