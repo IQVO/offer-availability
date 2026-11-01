@@ -35,7 +35,13 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
-        <p className={styles.heroLead}>TODO-LEAD</p>
+        <p className={styles.heroLead}>
+          Knows what the retail network can sell and from which node: the catalogue items with their
+          GS1 packaging, one listing per item and node, and the quantity each vendor-run node claims
+          it can ship, with the basis the vendor gave. Vendor inventory feeds are applied atomically
+          and in order, node status events suppress and restore listings, and every change leaves as a
+          CloudEvent for promise and sourcing.
+        </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview/introduction">
             Read the docs

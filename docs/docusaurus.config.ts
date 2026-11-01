@@ -6,7 +6,7 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 const config: Config = {
   title: 'Offer and Availability',
   tagline:
-    'Offer and Availability: a Supporting bounded context of the retail-network domain (warehouse-systems).',
+    'What the network can sell, from which node, and how much: catalogue, listings and vendor inventory feeds',
   favicon: 'img/favicon.svg',
 
   future: {
