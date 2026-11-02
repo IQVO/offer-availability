@@ -18,7 +18,7 @@ import (
 // GET /catalog/{catalogItemId}, GET /listings, GET /inventory-feeds/{feedId});
 // the adapter never constructs an outbound adapter itself, and it holds no
 // write use case at all (docs/adr/0006). POST /catalog-items,
-// POST /catalog-items/{id}:discontinue, POST /listings and
+// POST /catalog-items/{id}/discontinuations, POST /listings and
 // POST /inventory-feeds stay REST-only.
 type Deps struct {
 	BrowseCatalog    *usecases.BrowseCatalog
