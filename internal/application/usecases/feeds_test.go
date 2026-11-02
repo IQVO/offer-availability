@@ -36,8 +36,13 @@ func feedEnv(t *testing.T) *env {
 }
 
 func apply(e *env, cmd usecases.ApplyInventoryFeedCommand) (feedResult, error) {
-	v, err := usecases.NewApplyInventoryFeed(e.deps).Execute(context.Background(), cmd)
-	return feedResult{state: v.State, applied: v.AppliedCount, stale: v.StaleCount, zeroed: v.ZeroedCount, code: v.FailureCode, lines: v.LineCount}, err
+	res, err := usecases.NewApplyInventoryFeed(e.deps).Execute(context.Background(), cmd)
+	v := res.Feed
+	out := feedResult{state: v.State, applied: v.AppliedCount, stale: v.StaleCount, zeroed: v.ZeroedCount, code: v.FailureCode, lines: v.LineCount}
+	if res.Failed() {
+		out.failure = res.Failure
+	}
+	return out, err
 }
 
 type feedResult struct {
@@ -45,6 +50,7 @@ type feedResult struct {
 	applied, stale, zeroed int
 	lines                  int
 	code                   string
+	failure                error
 }
 
 func TestApplyPartialFeed(t *testing.T) {
@@ -163,7 +169,8 @@ func TestFailedFeedIsRecordedAndChangesNothingElse(t *testing.T) {
 		e := feedEnv(t)
 		before := e.store.Counts()
 		got, err := apply(e, feedCmd("feed-1", true, asOf1, c.lines...))
-		wantIs(t, err, c.want)
+		mustNot(t, err)
+		wantIs(t, got.failure, c.want)
 		if got.state != "FAILED" || got.code != c.code || got.applied != 0 {
 			t.Errorf("%s: result = %+v", c.name, got)
 		}
@@ -184,9 +191,10 @@ func TestFailedFeedIsRecordedAndChangesNothingElse(t *testing.T) {
 
 func TestFailedFeedMayBeSentAgain(t *testing.T) {
 	e := feedEnv(t)
-	_, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-zzz", 5)))
-	wantIs(t, err, feed.ErrListingNotOnNode)
-	got, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-a", 5)))
+	got, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-zzz", 5)))
+	mustNot(t, err)
+	wantIs(t, got.failure, feed.ErrListingNotOnNode)
+	got, err = apply(e, feedCmd("feed-1", false, asOf1, ln("lst-a", 5)))
 	mustNot(t, err)
 	if got.state != "APPLIED" || got.applied != 1 {
 		t.Fatalf("result = %+v", got)
@@ -203,8 +211,9 @@ func TestFailedFeedMayBeSentAgain(t *testing.T) {
 
 func TestResentFailedFeedCannotChangeNode(t *testing.T) {
 	e := feedEnv(t)
-	_, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-zzz", 5)))
-	wantIs(t, err, feed.ErrListingNotOnNode)
+	got, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-zzz", 5)))
+	mustNot(t, err)
+	wantIs(t, got.failure, feed.ErrListingNotOnNode)
 	cmd := feedCmd("feed-1", false, asOf1, ln("lst-x", 5))
 	cmd.NodeID = "node-2"
 	_, err = apply(e, cmd)

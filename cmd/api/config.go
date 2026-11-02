@@ -10,6 +10,7 @@ import (
 
 	outboxrelay "github.com/claudioed/offer-availability/internal/adapters/outbound/outbox"
 	"github.com/claudioed/offer-availability/internal/adapters/outbound/postgres"
+	"github.com/claudioed/offer-availability/internal/application/usecases"
 )
 
 // The environment variables of the service. DATABASE_URL and KAFKA_BROKERS are
@@ -22,6 +23,7 @@ const (
 	envHTTPAddr          = "HTTP_ADDR"
 	envRelayInterval     = "OUTBOX_RELAY_INTERVAL"
 	envMaxAttempts       = "OUTBOX_MAX_ATTEMPTS"
+	envFeedChunkSize     = "FEED_APPLY_CHUNK_SIZE"
 	envShutdownDrainWait = "SHUTDOWN_DRAIN_DELAY"
 	envLogLevel          = "LOG_LEVEL"
 )
@@ -54,6 +56,7 @@ type config struct {
 	addr          string
 	relayInterval time.Duration
 	maxAttempts   int
+	feedChunkSize int
 	drainDelay    time.Duration
 	logLevel      string
 }
@@ -82,6 +85,7 @@ func loadConfig(getenv func(string) string, logger *slog.Logger) (config, error)
 		addr:          orDefault(getenv(envHTTPAddr), defaultHTTPAddr),
 		relayInterval: parseRelayInterval(getenv(envRelayInterval), logger),
 		maxAttempts:   outboxMaxAttempts(getenv(envMaxAttempts), logger),
+		feedChunkSize: feedApplyChunkSize(getenv(envFeedChunkSize), logger),
 		drainDelay:    shutdownDrainDelay(getenv(envShutdownDrainWait), logger),
 		logLevel:      getenv(envLogLevel),
 	}, nil
@@ -154,6 +158,23 @@ func outboxMaxAttempts(raw string, logger *slog.Logger) int {
 	if err != nil || n < 0 {
 		logger.Warn("invalid "+envMaxAttempts+"; using the default", "value", raw, "default", outboxrelay.DefaultMaxAttempts)
 		return outboxrelay.DefaultMaxAttempts
+	}
+	return n
+}
+
+// feedApplyChunkSize reads FEED_APPLY_CHUNK_SIZE: how many changed listings
+// and outbox events one batch write carries while an inventory feed settles
+// (a full feed can touch every listing of a node). Unset = the fleet default
+// (500); a negative or unparsable value logs a warning and uses the default,
+// so a typo never silently removes the cap.
+func feedApplyChunkSize(raw string, logger *slog.Logger) int {
+	if raw == "" {
+		return usecases.DefaultFeedChunkSize
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n <= 0 {
+		logger.Warn("invalid "+envFeedChunkSize+"; using the default", "value", raw, "default", usecases.DefaultFeedChunkSize)
+		return usecases.DefaultFeedChunkSize
 	}
 	return n
 }

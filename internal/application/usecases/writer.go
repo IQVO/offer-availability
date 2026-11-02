@@ -36,6 +36,24 @@ type Deps struct {
 	// Metrics records the business outcome of each inventory feed attempt; nil
 	// records nothing, so unit tests need no wiring.
 	Metrics ports.FeedMetrics
+	// FeedChunkSize caps how many changed listings and outbox events one
+	// batch write carries while a feed settles. A full feed can touch every
+	// listing of a node, so the settle loop writes in batches of at most this
+	// size: each bulk save and outbox append stays bounded while the node's
+	// mark lock is held. Zero or negative means DefaultFeedChunkSize.
+	FeedChunkSize int
+}
+
+// DefaultFeedChunkSize bounds the batch writes of a settling feed when no
+// FeedChunkSize is configured.
+const DefaultFeedChunkSize = 500
+
+// chunkSize returns the configured batch cap of a feed's settle writes.
+func (d Deps) chunkSize() int {
+	if d.FeedChunkSize > 0 {
+		return d.FeedChunkSize
+	}
+	return DefaultFeedChunkSize
 }
 
 // metrics returns the configured FeedMetrics or a no-op.
