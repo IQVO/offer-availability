@@ -102,6 +102,10 @@ config:
   # OUTBOX_MAX_ATTEMPTS (ADR 0005): how many times one outbox row may fail
   # before the relay stops claiming it. 0 = unlimited.
   outboxMaxAttempts: 20
+  # FEED_APPLY_CHUNK_SIZE: how many changed listings and outbox events one
+  # batch write carries while an inventory feed settles (a full feed can
+  # touch every listing of a node), bounding per-node lock time.
+  feedApplyChunkSize: 500
   retentionInterval: "1h"            # RETENTION_INTERVAL: how often the janitor deletes expired rows
   # SHUTDOWN_DRAIN_DELAY: wait after /readyz flips before the listener closes.
   # Whole seconds / minutes / milliseconds only ("5s", "1m", "500ms", "0"):

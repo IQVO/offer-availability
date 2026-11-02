@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"github.com/claudioed/offer-availability/internal/application/ports"
-	"github.com/claudioed/offer-availability/internal/application/views"
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
@@ -28,21 +27,21 @@ var feedReasons = []struct {
 // caller can act on (a database error, a bug).
 const internalErrorReason = "internal-error"
 
-// recordOutcome counts one inventory feed attempt. A nil error is an applied or
-// superseded feed (the view says which); an error that comes with a stored view
-// is a FAILED feed (it is committed, ADR 0005); any other error is a refusal
+// recordOutcome counts one inventory feed attempt. A nil error is a settled
+// feed: FAILED when the result carries the broken invariant (it is committed,
+// ADR 0005), APPLIED or SUPERSEDED otherwise; a non-nil error is a refusal
 // that recorded nothing.
-func (uc *ApplyInventoryFeed) recordOutcome(ctx context.Context, v views.InventoryFeed, err error) {
+func (uc *ApplyInventoryFeed) recordOutcome(ctx context.Context, res FeedResult, err error) {
 	m := uc.metrics()
 	switch {
-	case err == nil && v.State == string(feed.StateSuperseded):
-		m.FeedSuperseded(ctx)
-	case err == nil:
-		m.FeedApplied(ctx)
-	case v.State == string(feed.StateFailed):
-		m.FeedFailed(ctx, feedReason(err))
-	default:
+	case err != nil:
 		m.FeedRejected(ctx, feedReason(err))
+	case res.Failed():
+		m.FeedFailed(ctx, feedReason(res.Failure))
+	case res.Feed.State == string(feed.StateSuperseded):
+		m.FeedSuperseded(ctx)
+	default:
+		m.FeedApplied(ctx)
 	}
 }
 

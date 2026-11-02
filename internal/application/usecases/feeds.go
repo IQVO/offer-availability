@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/claudioed/offer-availability/internal/application/views"
@@ -26,14 +27,20 @@ type ApplyInventoryFeed struct{ writer }
 // NewApplyInventoryFeed builds the use case.
 func NewApplyInventoryFeed(d Deps) *ApplyInventoryFeed { return &ApplyInventoryFeed{writer{d}} }
 
-// outcome is what one attempt hands back: the feed as stored and, for a FAILED
-// feed, the invariant that broke. A FAILED feed is committed (the row stays,
-// nothing else changes), so the attempt returns nil to the unit of work and the
-// failure is reported after the commit.
-type outcome struct {
-	view    views.InventoryFeed
-	failure error
+// FeedResult is the outcome of one ApplyInventoryFeed attempt: the stored
+// feed, and for a FAILED feed the invariant that broke. A FAILED feed is
+// committed (the row stays, nothing else changes), so its failure travels in
+// the result, not as the command's error: the error return is non-nil only
+// for refusals that recorded nothing.
+type FeedResult struct {
+	// Feed is the feed as stored.
+	Feed views.InventoryFeed
+	// Failure is the invariant that broke, non-nil exactly when the feed FAILED.
+	Failure error
 }
+
+// Failed reports whether the feed was recorded FAILED.
+func (r FeedResult) Failed() bool { return r.Failure != nil }
 
 // Execute validates the request (a malformed request is shared.ErrValidation
 // and records nothing), then, under the node's mark lock, records the feed
@@ -43,57 +50,57 @@ type outcome struct {
 //     is evaluated again;
 //   - a feed older than the last APPLIED feed of the node is SUPERSEDED;
 //   - a line that names no listing of the node, or a negative quantity, makes
-//     the feed FAILED: the returned view is the stored feed AND the error
-//     (feed.ErrListingNotOnNode or listing.ErrNegativeAvailability) is returned
-//     with it;
+//     the feed FAILED: the result carries the stored feed and its Failure is
+//     the broken invariant (feed.ErrListingNotOnNode or
+//     listing.ErrNegativeAvailability);
 //   - otherwise the lines are applied (stale ones skipped and counted), a full
 //     feed zeroes the omitted listings, every changed listing is saved in bulk,
 //     the node's mark advances and the feed is APPLIED.
 //
 // The events leave in the order: one ListingAvailabilityChanged per changed
 // listing, then InventoryFeedApplied.
-func (uc *ApplyInventoryFeed) Execute(ctx context.Context, cmd ApplyInventoryFeedCommand) (views.InventoryFeed, error) {
-	v, err := uc.execute(ctx, cmd)
-	uc.recordOutcome(ctx, v, err)
-	return v, err
+func (uc *ApplyInventoryFeed) Execute(ctx context.Context, cmd ApplyInventoryFeedCommand) (FeedResult, error) {
+	res, err := uc.execute(ctx, cmd)
+	uc.recordOutcome(ctx, res, err)
+	return res, err
 }
 
-func (uc *ApplyInventoryFeed) execute(ctx context.Context, cmd ApplyInventoryFeedCommand) (views.InventoryFeed, error) {
+func (uc *ApplyInventoryFeed) execute(ctx context.Context, cmd ApplyInventoryFeedCommand) (FeedResult, error) {
 	sub, err := feed.NewSubmission(cmd.FeedID, cmd.NodeID, cmd.FullUpdate, cmd.AsOf, cmd.Lines)
 	if err != nil {
-		return views.InventoryFeed{}, err
+		return FeedResult{}, err
 	}
-	out, err := transact(ctx, uc.UoW, func(ctx context.Context) (outcome, error) { return uc.attempt(ctx, sub) })
+	out, err := transact(ctx, uc.UoW, func(ctx context.Context) (FeedResult, error) { return uc.attempt(ctx, sub) })
 	if err != nil {
-		return views.InventoryFeed{}, err
+		return FeedResult{}, err
 	}
-	return out.view, out.failure
+	return out, nil
 }
 
-func (uc *ApplyInventoryFeed) attempt(ctx context.Context, sub feed.Submission) (outcome, error) {
+func (uc *ApplyInventoryFeed) attempt(ctx context.Context, sub feed.Submission) (FeedResult, error) {
 	lastApplied, err := uc.Marks.Lock(ctx, sub.NodeID)
 	if err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	f, err := uc.receive(ctx, sub)
 	if err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	if feed.Superseded(sub.AsOf, lastApplied) {
 		return uc.settle(ctx, f, f.MarkSuperseded())
 	}
 	listings, err := uc.loadListings(ctx, sub)
 	if err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	res, err := f.Apply(sub, listings, uc.now())
 	if errors.Is(err, feed.ErrListingNotOnNode) || errors.Is(err, listing.ErrNegativeAvailability) {
 		out, serr := uc.settle(ctx, f, f.MarkFailed(err))
-		out.failure = err
+		out.Failure = err
 		return out, serr
 	}
 	if err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	return uc.commit(ctx, sub, f, res)
 }
@@ -121,15 +128,15 @@ func (uc *ApplyInventoryFeed) receive(ctx context.Context, sub feed.Submission) 
 }
 
 // settle saves the feed after a transition (err is the transition's result) and
-// returns its view.
-func (uc *ApplyInventoryFeed) settle(ctx context.Context, f *feed.InventoryFeed, err error) (outcome, error) {
+// returns its result.
+func (uc *ApplyInventoryFeed) settle(ctx context.Context, f *feed.InventoryFeed, err error) (FeedResult, error) {
 	if err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	if err := uc.Feeds.Save(ctx, f); err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
-	return outcome{view: views.InventoryFeedFrom(f)}, nil
+	return FeedResult{Feed: views.InventoryFeedFrom(f)}, nil
 }
 
 // loadListings loads every listing the lines name and, for a full feed, every
@@ -158,23 +165,48 @@ func (uc *ApplyInventoryFeed) loadListings(ctx context.Context, sub feed.Submiss
 }
 
 // commit settles an evaluated feed as APPLIED: listings, mark, feed and events.
-func (uc *ApplyInventoryFeed) commit(ctx context.Context, sub feed.Submission, f *feed.InventoryFeed, res feed.Result) (outcome, error) {
+// The changed listings and the raised events are written in batches of at most
+// chunkSize, so a full feed that touches every listing of a node never builds
+// one unbounded bulk save or outbox append; all-or-nothing is kept, a failing
+// batch aborts the whole unit of work.
+func (uc *ApplyInventoryFeed) commit(ctx context.Context, sub feed.Submission, f *feed.InventoryFeed, res feed.Result) (FeedResult, error) {
 	feedEvents, err := f.MarkApplied(res, uc.now())
 	if err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
-	if err := uc.Listings.SaveMany(ctx, res.Changed); err != nil {
-		return outcome{}, err
+	if err := uc.saveChanged(ctx, res.Changed); err != nil {
+		return FeedResult{}, err
 	}
 	if err := uc.Marks.Advance(ctx, sub.NodeID, sub.AsOf); err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	if err := uc.Feeds.Save(ctx, f); err != nil {
-		return outcome{}, err
+		return FeedResult{}, err
 	}
 	events := append(append([]shared.Event(nil), res.Events...), feedEvents...)
-	if err := uc.publish(ctx, events); err != nil {
-		return outcome{}, err
+	if err := uc.publishInBatches(ctx, events); err != nil {
+		return FeedResult{}, err
 	}
-	return outcome{view: views.InventoryFeedFrom(f)}, nil
+	return FeedResult{Feed: views.InventoryFeedFrom(f)}, nil
+}
+
+// saveChanged persists the changed listings in batches of at most chunkSize.
+func (uc *ApplyInventoryFeed) saveChanged(ctx context.Context, changed []*listing.Listing) error {
+	for batch := range slices.Chunk(changed, uc.chunkSize()) {
+		if err := uc.Listings.SaveMany(ctx, batch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// publishInBatches appends the raised events to the outbox in batches of at
+// most chunkSize.
+func (w writer) publishInBatches(ctx context.Context, events []shared.Event) error {
+	for batch := range slices.Chunk(events, w.chunkSize()) {
+		if err := w.publish(ctx, batch); err != nil {
+			return err
+		}
+	}
+	return nil
 }
