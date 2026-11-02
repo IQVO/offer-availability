@@ -17,7 +17,7 @@ export function CatalogScreen() {
   const [cursors, setCursors] = useState<string[]>([""]);
   const cursor = cursors[cursors.length - 1];
   const page = useRequest(
-    () => browseCatalog({ limit: 25, after: cursor || undefined }),
+    () => browseCatalog({ limit: 25, cursor: cursor || undefined }),
     `catalog|${cursor}`,
   );
 

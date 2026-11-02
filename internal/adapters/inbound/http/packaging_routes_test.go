@@ -51,11 +51,11 @@ func TestPackagingRoutes(t *testing.T) {
 
 func assertRetire(t *testing.T, r *rig, id string) {
 	t.Helper()
-	ret := r.do(http.MethodPost, "/catalog-items/"+id+"/packaging/INNER:retire", "")
+	ret := r.do(http.MethodPost, "/catalog-items/"+id+"/packaging/INNER/retirements", "")
 	if ret.code != http.StatusOK || ret.json()["packaging"].([]any)[1].(map[string]any)["active"] != false {
 		t.Fatalf("retire: %d %s", ret.code, ret.body)
 	}
-	if again := r.do(http.MethodPost, "/catalog-items/"+id+"/packaging/INNER:retire", ""); again.code != http.StatusOK {
+	if again := r.do(http.MethodPost, "/catalog-items/"+id+"/packaging/INNER/retirements", ""); again.code != http.StatusOK {
 		t.Fatalf("retiring twice: %d %s", again.code, again.body)
 	}
 }
@@ -73,16 +73,16 @@ func TestPackagingErrors(t *testing.T) {
 		slug                     string
 	}{
 		{"unknown item", http.MethodPut, "/catalog-items/none/packaging/EACH", good, 404, "not-found"},
-		{"unknown item retire", http.MethodPost, "/catalog-items/none/packaging/EACH:retire", "", 404, "not-found"},
+		{"unknown item retire", http.MethodPost, "/catalog-items/none/packaging/EACH/retirements", "", 404, "not-found"},
 		{"bad level", http.MethodPut, base + "BOX", good, 422, "invalid-pack-level"},
-		{"bad level retire", http.MethodPost, base + "BOX:retire", "", 422, "invalid-pack-level"},
+		{"bad level retire", http.MethodPost, base + "BOX/retirements", "", 422, "invalid-pack-level"},
 		{"lower case level", http.MethodPut, base + "each", good, 422, "invalid-pack-level"},
 		{"bad check digit", http.MethodPut, base + "INNER", `{"gtin":"06141410000121","childGtin":"` + pEach + `","unitsPerPack":6}`, 422, "invalid-gtin"},
 		{"no child", http.MethodPut, base + "INNER", `{"gtin":"` + pInner + `","unitsPerPack":6}`, 422, "pack-level-order"},
 		{"units below 2", http.MethodPut, base + "INNER", `{"gtin":"` + pInner + `","childGtin":"` + pEach + `","unitsPerPack":1}`, 422, "invalid-pack-quantity"},
 		{"partial dims", http.MethodPut, base + "EACH", `{"gtin":"` + pEach + `","unitsPerPack":1,"dimsMm":{"lengthMm":5}}`, 422, "invalid-pack-dimensions"},
 		{"gtin of another item", http.MethodPut, base + "INNER", `{"gtin":"` + pOther + `","childGtin":"` + pEach + `","unitsPerPack":6}`, 409, "gtin-already-assigned"},
-		{"never declared", http.MethodPost, base + "PALLET:retire", "", 404, "pack-level-not-found"},
+		{"never declared", http.MethodPost, base + "PALLET/retirements", "", 404, "pack-level-not-found"},
 		{"malformed body", http.MethodPut, base + "EACH", `{`, 400, "malformed-request-body"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

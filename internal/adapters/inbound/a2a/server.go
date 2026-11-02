@@ -32,6 +32,13 @@ import (
 	"github.com/claudioed/offer-availability/internal/application/usecases"
 )
 
+const (
+	// serviceName is this context's name in the retail network and the tag
+	// every skill carries.
+	serviceName = "offer-availability"
+	contentJSON = "application/json"
+)
+
 // Config carries the deployment-specific identity of this agent: the absolute
 // URL clients use to reach its JSON-RPC endpoint (advertised on the Agent
 // Card) and the card version. The composition root supplies it from
@@ -60,7 +67,7 @@ type Deps struct {
 // redesign, if that decision is ever reversed.
 func Card(cfg Config) *a2a.AgentCard {
 	return &a2a.AgentCard{
-		Name:        "offer-availability",
+		Name:        serviceName,
 		Description: "Offer & Availability agent of the retail network (read-only): answers where an item can be sold and how much is available there (the catalogue item, which nodes list it, whether each listing is LIVE or SUPPRESSED and why, and the quantity a vendor's feed last reported), and what became of one vendor inventory feed (applied, superseded or failed, with its counters and failure code). It never creates or discontinues an item, never lists an item on a node and never applies a feed: those stay REST operations of offer-availability.",
 		Version:     cfg.Version,
 		Provider: &a2a.AgentProvider{
@@ -70,16 +77,16 @@ func Card(cfg Config) *a2a.AgentCard {
 		SupportedInterfaces: []*a2a.AgentInterface{
 			a2a.NewAgentInterface(cfg.AgentURL, a2a.TransportProtocolJSONRPC),
 		},
-		DefaultInputModes:  []string{"application/json", "text/plain"},
-		DefaultOutputModes: []string{"application/json", "text/plain"},
+		DefaultInputModes:  []string{contentJSON, "text/plain"},
+		DefaultOutputModes: []string{contentJSON, "text/plain"},
 		Capabilities:       a2a.AgentCapabilities{Streaming: false},
 		Skills: []a2a.AgentSkill{
 			{
 				ID:          skillCheckAvailability,
 				Name:        "Check where an item is sold and how much is available",
 				Description: "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
-				Tags:        []string{"offer-availability", "availability", "read"},
-				InputModes:  []string{"application/json"},
+				Tags:        []string{serviceName, "availability", "read"},
+				InputModes:  []string{contentJSON},
 				Examples: []string{
 					`{"skill":"check_availability","arguments":{"catalogItemId":"item-1"}}`,
 					`{"skill":"check_availability","arguments":{"nodeId":"node-a","limit":50}}`,
@@ -89,8 +96,8 @@ func Card(cfg Config) *a2a.AgentCard {
 				ID:          skillFeedOutcome,
 				Name:        "Read the outcome of one vendor inventory feed",
 				Description: "Read one vendor inventory feed by feedId: the node it was sent for (nodeId), whether it was a fullUpdate, its asOf, its state APPLIED, SUPERSEDED or FAILED with the counters (lineCount, appliedCount, staleCount, zeroedCount), receivedAt, appliedAt and, when it FAILED, the failureCode (listing-not-on-node or negative-availability). An unknown feedId is a not-found problem. Reading a feed changes nothing; applying one stays a REST operation.",
-				Tags:        []string{"offer-availability", "inventory-feed", "read"},
-				InputModes:  []string{"application/json"},
+				Tags:        []string{serviceName, "inventory-feed", "read"},
+				InputModes:  []string{contentJSON},
 				Examples: []string{
 					`{"skill":"feed_outcome","arguments":{"feedId":"feed-7"}}`,
 				},

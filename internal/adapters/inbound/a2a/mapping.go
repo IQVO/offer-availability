@@ -179,12 +179,12 @@ func toListing(l views.Listing) listingView {
 // toAvailability composes the check_availability answer and its one-line
 // summary from the optional item and one listing page.
 func toAvailability(item *views.CatalogItem, page views.ListingPage) skillDTO {
-	answer := &availabilityAnswer{Listings: make([]listingView, 0, len(page.Listings)), NextCursor: page.NextCursor}
+	answer := &availabilityAnswer{Listings: make([]listingView, 0, len(page.Items)), NextCursor: page.NextCursor}
 	if item != nil {
 		answer.Item = toCatalogItem(*item)
 	}
 	live, suppressed, qty := 0, 0, 0
-	for _, l := range page.Listings {
+	for _, l := range page.Items {
 		answer.Listings = append(answer.Listings, toListing(l))
 		if l.State == "LIVE" {
 			live++
@@ -193,7 +193,7 @@ func toAvailability(item *views.CatalogItem, page views.ListingPage) skillDTO {
 			suppressed++
 		}
 	}
-	summary := fmt.Sprintf("%d listings (%d LIVE, %d SUPPRESSED), %d units reported on the LIVE ones", len(page.Listings), live, suppressed, qty)
+	summary := fmt.Sprintf("%d listings (%d LIVE, %d SUPPRESSED), %d units reported on the LIVE ones", len(page.Items), live, suppressed, qty)
 	if item != nil {
 		summary = fmt.Sprintf("%s (%s): %s", item.CatalogItemID, item.State, summary)
 	}

@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { Card, DataTable } from "@warehouse/ui-kit";
-import { getCatalogItem, listListings } from "../api";
+import { getCatalogItem, listAllListings } from "../api";
 import { Facts, ListingStatePill, PageHeader, Stack, availabilityLabel, suppressionLabel } from "../components/layout";
 import { RequestView } from "../components/ProblemAlert";
 import { useRequest } from "../hooks/useRequest";
@@ -12,7 +12,7 @@ import { dimensions, grams } from "../lib";
 export function CatalogItemRoute() {
   const { catalogItemId = "" } = useParams();
   const item = useRequest(() => getCatalogItem(catalogItemId), `item|${catalogItemId}`);
-  const listings = useRequest(() => listListings({ catalogItemId, limit: 50 }), `item-listings|${catalogItemId}`);
+  const listings = useRequest(() => listAllListings({ catalogItemId }), `item-listings|${catalogItemId}`);
 
   return (
     <Stack gap={5}>
@@ -47,13 +47,13 @@ export function CatalogItemRoute() {
         <RequestView
           state={listings}
           what="listings"
-          isEmpty={(p) => p.listings.length === 0}
+          isEmpty={(p) => p.items.length === 0}
           empty="No node lists this item."
         >
           {(p) => (
             <DataTable
               rowKey={(l) => l.listingId}
-              rows={p.listings}
+              rows={p.items}
               columns={[
                 {
                   key: "node",

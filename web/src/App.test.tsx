@@ -21,7 +21,7 @@ function renderUnderHost(path: string) {
 const ROUTES = {
   "GET /catalog": json({ items: [catalogItem()] }),
   "GET /catalog/item-1": json(catalogItem()),
-  "GET /listings": json({ listings: [listing()] }),
+  "GET /listings": json({ items: [listing()] }),
   "GET /inventory-feeds/feed-7": json(feed()),
 };
 

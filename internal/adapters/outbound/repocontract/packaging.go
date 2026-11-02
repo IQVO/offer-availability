@@ -37,16 +37,16 @@ func mustGTIN(t testing.TB, s string) gs1.GTIN {
 	return g
 }
 
-// savePackaged stores an ACTIVE item (own gtin when gtin != "") at version 1,
+// savePackaged stores an ACTIVE item1 (own gtin when gtin != "") at version 1,
 // then declares and saves an EACH (version 2) and an INNER level (version 3).
-func savePackaged(t *testing.T, f Fixture, id catalog.ID, gtin string) *catalog.Item {
+func savePackaged(t *testing.T, f Fixture, gtin string) *catalog.Item {
 	t.Helper()
 	ctx := context.Background()
-	spec := catalog.Spec{Title: "Item " + string(id), LengthMm: 10, WidthMm: 10, HeightMm: 10, WeightG: 10}
+	spec := catalog.Spec{Title: "Item " + item1, LengthMm: 10, WidthMm: 10, HeightMm: 10, WeightG: 10}
 	if gtin != "" {
 		spec.GTIN = mustGTIN(t, gtin)
 	}
-	it, _, err := catalog.Create(id, spec, Now)
+	it, _, err := catalog.Create(item1, spec, Now)
 	noErr(t, err)
 	noErr(t, f.Catalog.Save(ctx, it))
 	each := catalog.PackSpec{GTIN: mustGTIN(t, gtinEach), UnitsPerPack: 1, GrossWeightG: 10}
@@ -64,12 +64,12 @@ func savePackaged(t *testing.T, f Fixture, id catalog.ID, gtin string) *catalog.
 
 func packRoundTrip(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	it := savePackaged(t, f, "item-1", gtinCase)
+	it := savePackaged(t, f, gtinCase)
 	if _, err := it.RetirePackLevel(catalog.PackLevelInner, Now); err != nil {
 		t.Fatal(err)
 	}
 	noErr(t, f.Catalog.Save(ctx, it))
-	got, err := f.Catalog.Get(ctx, "item-1")
+	got, err := f.Catalog.Get(ctx, item1)
 	noErr(t, err)
 	if !reflect.DeepEqual(got.PackLevels(), it.PackLevels()) || got.Snapshot() != it.Snapshot() {
 		t.Fatalf("round trip lost data:\n got  %+v %+v\n want %+v %+v", got.PackLevels(), got.Snapshot(), it.PackLevels(), it.Snapshot())
@@ -83,10 +83,10 @@ func packRoundTrip(t *testing.T, f Fixture) {
 
 func packUpdate(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	savePackaged(t, f, "item-1", "")
-	loaded, err := f.Catalog.Get(ctx, "item-1")
+	savePackaged(t, f, "")
+	loaded, err := f.Catalog.Get(ctx, item1)
 	noErr(t, err)
-	stale, err := f.Catalog.Get(ctx, "item-1")
+	stale, err := f.Catalog.Get(ctx, item1)
 	noErr(t, err)
 	if _, err := loaded.DeclarePackLevel(catalog.PackLevelCase, catalog.PackSpec{GTIN: mustGTIN(t, gtinCase), ChildGTIN: mustGTIN(t, gtinInner), UnitsPerPack: 24}, Now); err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func packUpdate(t *testing.T, f Fixture) {
 		t.Fatal(err)
 	}
 	wantErr(t, f.Catalog.Save(ctx, stale), ports.ErrConcurrentUpdate)
-	got, err := f.Catalog.Get(ctx, "item-1")
+	got, err := f.Catalog.Get(ctx, item1)
 	noErr(t, err)
 	if levels := got.PackLevels(); len(levels) != 3 || !levels[1].Active || levels[2].Level != catalog.PackLevelCase {
 		t.Fatalf("stored levels = %+v", levels)
@@ -106,7 +106,7 @@ func packUpdate(t *testing.T, f Fixture) {
 		t.Fatal(err)
 	}
 	noErr(t, f.Catalog.Save(ctx, got))
-	again, err := f.Catalog.Get(ctx, "item-1")
+	again, err := f.Catalog.Get(ctx, item1)
 	noErr(t, err)
 	if levels := again.PackLevels(); len(levels) != 4 || levels[2].Active || !levels[3].Active {
 		t.Fatalf("after supersede = %+v", levels)
@@ -115,11 +115,11 @@ func packUpdate(t *testing.T, f Fixture) {
 
 func packFindByGTIN(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	savePackaged(t, f, "item-1", gtinCase)
+	savePackaged(t, f, gtinCase)
 	for _, g := range []string{gtinCase, gtinEach, gtinInner} {
 		id, err := f.Catalog.FindByGTIN(ctx, mustGTIN(t, g))
 		noErr(t, err)
-		if id != "item-1" {
+		if id != item1 {
 			t.Fatalf("FindByGTIN(%s) = %s", g, id)
 		}
 	}
@@ -129,9 +129,9 @@ func packFindByGTIN(t *testing.T, f Fixture) {
 
 func packGTINUnique(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	savePackaged(t, f, "item-1", gtinCase)
+	savePackaged(t, f, gtinCase)
 	// the same identifier on another item
-	dup := NewItem(t, "item-2")
+	dup := NewItem(t, item2)
 	other, _, err := catalog.Create("item-3", catalog.Spec{Title: "x", LengthMm: 1, WidthMm: 1, HeightMm: 1, WeightG: 1, GTIN: mustGTIN(t, gtinCase)}, Now)
 	noErr(t, err)
 	wantErr(t, f.Catalog.Save(ctx, other), catalog.ErrGtinAlreadyAssigned)
@@ -144,7 +144,7 @@ func packGTINUnique(t *testing.T, f Fixture) {
 		t.Fatal(err)
 	}
 	wantErr(t, f.Catalog.Save(ctx, dup), catalog.ErrGtinAlreadyAssigned)
-	got, err := f.Catalog.Get(ctx, "item-2")
+	got, err := f.Catalog.Get(ctx, item2)
 	noErr(t, err)
 	if got.Version() != 1 || len(got.PackLevels()) != 0 {
 		t.Fatalf("the refused save changed the item: v%d %+v", got.Version(), got.PackLevels())
@@ -154,35 +154,35 @@ func packGTINUnique(t *testing.T, f Fixture) {
 func listingOwner(t *testing.T, f Fixture) {
 	ctx := context.Background()
 	mk := func(id listing.ID, owner listing.OwnerRef) *listing.Listing {
-		l, _, err := listing.CreateOwned(id, "item-1", "node-1", owner, listing.Sellability{NodeActive: true}, Now)
+		l, _, err := listing.CreateOwned(id, item1, node1, owner, listing.Sellability{NodeActive: true}, Now)
 		noErr(t, err)
 		return l
 	}
-	noErr(t, f.Listings.Save(ctx, mk("lst-1", "")))
-	noErr(t, f.Listings.Save(ctx, mk("lst-2", "seller-7")))
-	noErr(t, f.Listings.Save(ctx, mk("lst-3", "seller-8")))
-	wantErr(t, f.Listings.Save(ctx, mk("lst-4", "seller-7")), listing.ErrDuplicateListing)
+	noErr(t, f.Listings.Save(ctx, mk(lst1, "")))
+	noErr(t, f.Listings.Save(ctx, mk(lst2, "seller-7")))
+	noErr(t, f.Listings.Save(ctx, mk(lst3, "seller-8")))
+	wantErr(t, f.Listings.Save(ctx, mk(lst4, "seller-7")), listing.ErrDuplicateListing)
 	wantErr(t, f.Listings.Save(ctx, mk("lst-5", "")), listing.ErrDuplicateListing)
-	got, err := f.Listings.FindByItemNodeOwner(ctx, "item-1", "node-1", "seller-7")
+	got, err := f.Listings.FindByItemNodeOwner(ctx, item1, node1, "seller-7")
 	noErr(t, err)
-	if got.ID() != "lst-2" || got.OwnerRef() != "seller-7" {
+	if got.ID() != lst2 || got.OwnerRef() != "seller-7" {
 		t.Fatalf("seller-7 listing = %s %q", got.ID(), got.OwnerRef())
 	}
-	plain, err := f.Listings.FindByItemAndNode(ctx, "item-1", "node-1")
+	plain, err := f.Listings.FindByItemAndNode(ctx, item1, node1)
 	noErr(t, err)
-	if plain.ID() != "lst-1" || plain.OwnerRef() != "" {
+	if plain.ID() != lst1 || plain.OwnerRef() != "" {
 		t.Fatalf("the operator-owned lookup answered %s %q", plain.ID(), plain.OwnerRef())
 	}
-	_, err = f.Listings.FindByItemNodeOwner(ctx, "item-1", "node-1", "seller-9")
+	_, err = f.Listings.FindByItemNodeOwner(ctx, item1, node1, "seller-9")
 	wantErr(t, err, ports.ErrNotFound)
-	if got := listingIDs(mustList(t, f)); !reflect.DeepEqual(got, []listing.ID{"lst-1", "lst-2", "lst-3"}) {
+	if got := listingIDs(mustList(t, f)); !reflect.DeepEqual(got, []listing.ID{lst1, lst2, lst3}) {
 		t.Fatalf("listings = %v", got)
 	}
 }
 
 func mustList(t *testing.T, f Fixture) []*listing.Listing {
 	t.Helper()
-	ls, err := f.Listings.ListByItem(context.Background(), "item-1")
+	ls, err := f.Listings.ListByItem(context.Background(), item1)
 	noErr(t, err)
 	return ls
 }

@@ -6,6 +6,9 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/shared"
 )
 
+// entityName is the entity every listing event carries.
+const entityName = "listing"
+
 // ListingCreated is raised by Create. Its fields are the model's data list.
 type ListingCreated struct {
 	shared.Header
@@ -20,7 +23,7 @@ type ListingCreated struct {
 func (ListingCreated) EventName() string { return "ListingCreated" }
 
 // Entity returns "listing".
-func (ListingCreated) Entity() string { return "listing" }
+func (ListingCreated) Entity() string { return entityName }
 
 // SubjectID returns the listingId.
 func (e ListingCreated) SubjectID() string { return string(e.ListingID) }
@@ -42,7 +45,7 @@ type ListingAvailabilityChanged struct {
 func (ListingAvailabilityChanged) EventName() string { return "ListingAvailabilityChanged" }
 
 // Entity returns "listing".
-func (ListingAvailabilityChanged) Entity() string { return "listing" }
+func (ListingAvailabilityChanged) Entity() string { return entityName }
 
 // SubjectID returns the listingId.
 func (e ListingAvailabilityChanged) SubjectID() string { return string(e.ListingID) }
@@ -60,7 +63,7 @@ type ListingSuppressed struct {
 func (ListingSuppressed) EventName() string { return "ListingSuppressed" }
 
 // Entity returns "listing".
-func (ListingSuppressed) Entity() string { return "listing" }
+func (ListingSuppressed) Entity() string { return entityName }
 
 // SubjectID returns the listingId.
 func (e ListingSuppressed) SubjectID() string { return string(e.ListingID) }
@@ -76,7 +79,7 @@ type ListingRestored struct {
 func (ListingRestored) EventName() string { return "ListingRestored" }
 
 // Entity returns "listing".
-func (ListingRestored) Entity() string { return "listing" }
+func (ListingRestored) Entity() string { return entityName }
 
 // SubjectID returns the listingId.
 func (e ListingRestored) SubjectID() string { return string(e.ListingID) }

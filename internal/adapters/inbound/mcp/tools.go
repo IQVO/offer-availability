@@ -18,7 +18,7 @@ import (
 // GET /catalog/{catalogItemId}, GET /listings, GET /inventory-feeds/{feedId});
 // the adapter never constructs an outbound adapter itself, and it holds no
 // write use case at all (docs/adr/0006). POST /catalog-items,
-// POST /catalog-items/{id}:discontinue, POST /listings and
+// POST /catalog-items/{id}/discontinuations, POST /listings and
 // POST /inventory-feeds stay REST-only.
 type Deps struct {
 	BrowseCatalog    *usecases.BrowseCatalog
@@ -190,8 +190,8 @@ func toListing(l views.Listing) listingView {
 }
 
 func toListingPage(page views.ListingPage) listingPageView {
-	listings := make([]listingView, 0, len(page.Listings))
-	for _, l := range page.Listings {
+	listings := make([]listingView, 0, len(page.Items))
+	for _, l := range page.Items {
 		listings = append(listings, toListing(l))
 	}
 	return listingPageView{Listings: listings, NextCursor: page.NextCursor}

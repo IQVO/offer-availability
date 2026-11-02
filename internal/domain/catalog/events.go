@@ -7,6 +7,9 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
 
+// entityName is the entity every catalogue event carries.
+const entityName = "catalogitem"
+
 // CatalogItemCreated is raised by Create. Its fields are the model's data list.
 type CatalogItemCreated struct {
 	shared.Header
@@ -26,7 +29,7 @@ type CatalogItemCreated struct {
 func (CatalogItemCreated) EventName() string { return "CatalogItemCreated" }
 
 // Entity returns "catalogitem".
-func (CatalogItemCreated) Entity() string { return "catalogitem" }
+func (CatalogItemCreated) Entity() string { return entityName }
 
 // SubjectID returns the catalogItemId.
 func (e CatalogItemCreated) SubjectID() string { return string(e.CatalogItemID) }
@@ -41,7 +44,7 @@ type CatalogItemDiscontinued struct {
 func (CatalogItemDiscontinued) EventName() string { return "CatalogItemDiscontinued" }
 
 // Entity returns "catalogitem".
-func (CatalogItemDiscontinued) Entity() string { return "catalogitem" }
+func (CatalogItemDiscontinued) Entity() string { return entityName }
 
 // SubjectID returns the catalogItemId.
 func (e CatalogItemDiscontinued) SubjectID() string { return string(e.CatalogItemID) }
@@ -62,7 +65,7 @@ type CatalogItemPackagingDeclared struct {
 func (CatalogItemPackagingDeclared) EventName() string { return "CatalogItemPackagingDeclared" }
 
 // Entity returns "catalogitem".
-func (CatalogItemPackagingDeclared) Entity() string { return "catalogitem" }
+func (CatalogItemPackagingDeclared) Entity() string { return entityName }
 
 // SubjectID returns the catalogItemId.
 func (e CatalogItemPackagingDeclared) SubjectID() string { return string(e.CatalogItemID) }
@@ -81,7 +84,7 @@ type CatalogItemPackLevelRetired struct {
 func (CatalogItemPackLevelRetired) EventName() string { return "CatalogItemPackLevelRetired" }
 
 // Entity returns "catalogitem".
-func (CatalogItemPackLevelRetired) Entity() string { return "catalogitem" }
+func (CatalogItemPackLevelRetired) Entity() string { return entityName }
 
 // SubjectID returns the catalogItemId.
 func (e CatalogItemPackLevelRetired) SubjectID() string { return string(e.CatalogItemID) }

@@ -57,7 +57,7 @@ func TestDrainStopsAtTheFirstFailureAndRecordsIt(t *testing.T) {
 		}
 		return nil
 	})
-	var sf *outbox.SendFailure
+	var sf *outbox.SendFailureError
 	if n != 1 || !errors.As(err, &sf) || sf.RowID != second || sf.Attempts != 1 || !errors.Is(err, errBroker) || string(sf.Message.Key) != "b" {
 		t.Fatalf("pass: %d %v", n, err)
 	}
@@ -95,7 +95,7 @@ func TestARowAtTheAttemptCapIsExcludedAndLaterRowsOvertakeIt(t *testing.T) {
 	}
 	for want := 1; want <= 2; want++ {
 		_, err := repo.Drain(context.Background(), 10, 2, fail)
-		var sf *outbox.SendFailure
+		var sf *outbox.SendFailureError
 		if !errors.As(err, &sf) || sf.Attempts != want {
 			t.Fatalf("pass %d: %v", want, err)
 		}

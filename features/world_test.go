@@ -177,12 +177,15 @@ func (w *world) applyFeed(full bool, id, node, asOf string, table *godog.Table) 
 		lines = append(lines, feed.Line{ListingID: lid, Qty: qty, Basis: listing.Basis(row.Cells[2].Value)})
 	}
 	w.act()
-	v, err := usecases.NewApplyInventoryFeed(w.deps).Execute(context.Background(), usecases.ApplyInventoryFeedCommand{
+	res, err := usecases.NewApplyInventoryFeed(w.deps).Execute(context.Background(), usecases.ApplyInventoryFeedCommand{
 		FeedID: feed.ID(id), NodeID: listing.NodeID(node), FullUpdate: full, AsOf: at, Lines: lines,
 	})
 	w.err = err
-	if v.FeedID != "" {
-		w.feeds[id] = v
+	if res.Failed() {
+		w.err = res.Failure
+	}
+	if res.Feed.FeedID != "" {
+		w.feeds[id] = res.Feed
 	}
 	return nil
 }
@@ -275,7 +278,7 @@ func (w *world) requestFails(name string) error {
 		return fmt.Errorf("the scenario names an unknown error %q", name)
 	}
 	if !errors.Is(w.err, want) {
-		return fmt.Errorf("the request failed with %v, want %s", w.err, name)
+		return fmt.Errorf("the request failed with %w, want %s", w.err, name)
 	}
 	return nil
 }

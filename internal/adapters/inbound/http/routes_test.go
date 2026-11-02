@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -26,12 +27,12 @@ func TestCatalogRoutes(t *testing.T) {
 		t.Fatalf("browse = %v", page)
 	}
 
-	// The colon verb of the OpenAPI path routes to the use case.
-	disc := r.do(http.MethodPost, "/catalog-items/"+id+":discontinue", "")
+	// The discontinuations transition resource routes to the use case.
+	disc := r.do(http.MethodPost, "/catalog-items/"+id+"/discontinuations", "")
 	if disc.code != http.StatusOK || disc.json()["state"] != "DISCONTINUED" {
 		t.Fatalf("discontinue: %d %s", disc.code, disc.body)
 	}
-	if again := r.do(http.MethodPost, "/catalog-items/"+id+":discontinue", ""); again.code != http.StatusOK {
+	if again := r.do(http.MethodPost, "/catalog-items/"+id+"/discontinuations", ""); again.code != http.StatusOK {
 		t.Fatalf("discontinuing twice is a no-op: %d %s", again.code, again.body)
 	}
 }
@@ -39,13 +40,13 @@ func TestCatalogRoutes(t *testing.T) {
 func TestCatalogErrors(t *testing.T) {
 	r := newRig(t)
 	r.do(http.MethodGet, "/catalog/none", "").problem(t, http.StatusNotFound, "not-found")
-	r.do(http.MethodPost, "/catalog-items/none:discontinue", "").problem(t, http.StatusNotFound, "not-found")
+	r.do(http.MethodPost, "/catalog-items/none/discontinuations", "").problem(t, http.StatusNotFound, "not-found")
 	r.do(http.MethodPost, "/catalog-items", `{"title":"Bottle","lengthMm":0,"widthMm":75,"heightMm":75,"weightG":340}`).
 		problem(t, http.StatusUnprocessableEntity, "invalid-item-dimensions")
 	r.do(http.MethodPost, "/catalog-items", `{"title":"","lengthMm":1,"widthMm":1,"heightMm":1,"weightG":1}`).
 		problem(t, http.StatusUnprocessableEntity, "validation-failed")
-	r.do(http.MethodGet, "/catalog?limit=0", "").problem(t, http.StatusUnprocessableEntity, "validation-failed")
-	r.do(http.MethodGet, "/catalog?limit=abc", "").problem(t, http.StatusUnprocessableEntity, "validation-failed")
+	r.do(http.MethodGet, "/catalog?limit=0", "").problem(t, http.StatusBadRequest, "invalid-limit")
+	r.do(http.MethodGet, "/catalog?limit=abc", "").problem(t, http.StatusBadRequest, "invalid-limit")
 }
 
 func TestListingRoutes(t *testing.T) {
@@ -67,22 +68,22 @@ func TestListingRoutes(t *testing.T) {
 	}
 
 	for target, want := range map[string]int{
-		"/listings":                           2,
-		"/listings?nodeId=node-1":             1,
-		"/listings?catalogItemId=" + item:     2,
-		"/listings?nodeId=node-2&limit=1":     1,
-		"/listings?nodeId=nowhere":            0,
-		"/listings?catalogItemId=none&after=": 0,
+		"/listings":                            2,
+		"/listings?nodeId=node-1":              1,
+		"/listings?catalogItemId=" + item:      2,
+		"/listings?nodeId=node-2&limit=1":      1,
+		"/listings?nodeId=nowhere":             0,
+		"/listings?catalogItemId=none&cursor=": 0,
 	} {
 		got := r.do(http.MethodGet, target, "")
-		if got.code != http.StatusOK || len(got.json()["listings"].([]any)) != want {
+		if got.code != http.StatusOK || len(got.json()["items"].([]any)) != want {
 			t.Errorf("GET %s: %d %s, want %d listings", target, got.code, got.body, want)
 		}
 	}
 	r.do(http.MethodPost, "/listings", `{"catalogItemId":"`+item+`","nodeId":"node-1"}`).problem(t, http.StatusConflict, "duplicate-listing")
 	r.do(http.MethodPost, "/listings", `{"catalogItemId":"none","nodeId":"node-1"}`).problem(t, http.StatusNotFound, "not-found")
 	r.do(http.MethodPost, "/listings", `{"catalogItemId":"`+item+`","nodeId":"bad node"}`).problem(t, http.StatusUnprocessableEntity, "validation-failed")
-	r.do(http.MethodGet, "/listings?limit=x", "").problem(t, http.StatusUnprocessableEntity, "validation-failed")
+	r.do(http.MethodGet, "/listings?limit=x", "").problem(t, http.StatusBadRequest, "invalid-limit")
 }
 
 func feedBody(feed, node, asOf string, full bool, lines ...string) string {
@@ -124,7 +125,7 @@ func TestFeedRoutes(t *testing.T) {
 	if got := r.do(http.MethodGet, "/inventory-feeds/f1", ""); got.code != http.StatusOK || got.json()["state"] != "APPLIED" {
 		t.Fatalf("get: %d %s", got.code, got.body)
 	}
-	l := r.do(http.MethodGet, "/listings?nodeId=node-1", "").json()["listings"].([]any)[0].(map[string]any)
+	l := r.do(http.MethodGet, "/listings?nodeId=node-1", "").json()["items"].([]any)[0].(map[string]any)
 	av := l["availability"].(map[string]any)
 	if av["availableQty"] != float64(120) || av["basis"] != "THROUGHPUT_CONSTRAINED" || av["asOf"] != "2026-10-23T10:00:00Z" || av["feedId"] != "f1" {
 		t.Fatalf("availability = %v", av)
@@ -216,7 +217,7 @@ func TestHealthAndReadiness(t *testing.T) {
 }
 
 func TestNewRouterRefusesAServerWithoutIdempotency(t *testing.T) {
-	if _, err := NewRouter(&Server{}); err != ErrNoIdempotency {
+	if _, err := NewRouter(&Server{}); !errors.Is(err, ErrNoIdempotency) {
 		t.Fatalf("err = %v", err)
 	}
 }

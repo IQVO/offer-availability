@@ -51,7 +51,7 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
     Then the response is a 422 "validation-failed" problem
 
   Scenario: A NUL character in the query string is a 400 malformed-request-query problem
-    When a GET request is sent to "/catalog?after=%00"
+    When a GET request is sent to "/catalog?cursor=%00"
     Then the response is a 400 "malformed-request-query" problem
 
   Scenario: Reading one item by id, and the 404 of an unknown one
@@ -75,14 +75,14 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
       """
       {"catalogItemId":"item-1","nodeId":"N1"}
       """
-    When a POST request is sent to "/catalog-items/item-1:discontinue"
+    When a POST request is sent to "/catalog-items/item-1/discontinuations"
     Then the response status is 200
     And the response field "state" is "DISCONTINUED"
     And the last events are "CatalogItemDiscontinued, ListingSuppressed"
     When a GET request is sent to "/listings?nodeId=N1"
-    Then the response field "listings.0.state" is "SUPPRESSED"
-    And the response field "listings.0.suppressionReason" is "DISCONTINUED"
-    When a POST request is sent to "/catalog-items/item-404:discontinue"
+    Then the response field "items.0.state" is "SUPPRESSED"
+    And the response field "items.0.suppressionReason" is "DISCONTINUED"
+    When a POST request is sent to "/catalog-items/item-404/discontinuations"
     Then the response is a 404 "not-found" problem
 
   Scenario: A listing on a node that is not active starts SUPPRESSED for NODE_NOT_SELLABLE
@@ -136,15 +136,15 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
       {"catalogItemId":"item-1","nodeId":"N2"}
       """
     When a GET request is sent to "/listings"
-    Then the response list "listings" has 2 items
+    Then the response list "items" has 2 items
     When a GET request is sent to "/listings?nodeId=N1"
-    Then the response list "listings" has 1 items
-    And the response field "listings.0.listingId" is "lst-1"
+    Then the response list "items" has 1 items
+    And the response field "items.0.listingId" is "lst-1"
     When a GET request is sent to "/listings?nodeId=N1&catalogItemId=item-1"
-    Then the response list "listings" has 1 items
+    Then the response list "items" has 1 items
     When a GET request is sent to "/listings?nodeId=nowhere"
     Then the response status is 200
-    And the response list "listings" has 0 items
+    And the response list "items" has 0 items
 
   Scenario: Keyset pagination of the catalogue walk the pages by nextCursor
     Given a POST request is sent to "/catalog-items" with the JSON body:
@@ -163,8 +163,8 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
     Then the response list "items" has 2 items
     And the response field "items.0.catalogItemId" is "item-1"
     And the response field "items.1.catalogItemId" is "item-2"
-    And the response field "nextCursor" is "item-2"
-    When a GET request is sent to "/catalog?limit=2&after=item-2"
+    And the response field "nextCursor" is "eyJzIjoiIiwiaSI6Iml0ZW0tMiJ9"
+    When a GET request is sent to "/catalog?limit=2&cursor=eyJzIjoiIiwiaSI6Iml0ZW0tMiJ9"
     Then the response list "items" has 1 items
     And the response field "items.0.catalogItemId" is "item-3"
     And the response has no field "nextCursor"
@@ -172,13 +172,21 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
     Then the response list "items" has 3 items
     And the response has no field "nextCursor"
 
-  Scenario: A page size out of 1 to 500 is a 422 validation-failed problem
+  Scenario: A page size out of 1 to 500 is a 400 invalid-limit problem
     When a GET request is sent to "/catalog?limit=0"
-    Then the response is a 422 "validation-failed" problem
+    Then the response is a 400 "invalid-limit" problem
     When a GET request is sent to "/catalog?limit=501"
-    Then the response is a 422 "validation-failed" problem
+    Then the response is a 400 "invalid-limit" problem
     When a GET request is sent to "/catalog?limit=abc"
-    Then the response is a 422 "validation-failed" problem
+    Then the response is a 400 "invalid-limit" problem
+
+  Scenario: A cursor that does not decode or a retired paging parameter is a 400 problem
+    When a GET request is sent to "/catalog?cursor=!!!"
+    Then the response is a 400 "invalid-cursor" problem
+    When a GET request is sent to "/catalog?after=item-1"
+    Then the response is a 400 "unknown-query-parameter" problem
+    When a GET request is sent to "/listings?offset=1"
+    Then the response is a 400 "unknown-query-parameter" problem
 
   Scenario: Keyset pagination of the listings list ends without a cursor on the last page
     Given a POST request is sent to "/catalog-items" with the JSON body:
@@ -194,11 +202,11 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
       {"catalogItemId":"item-1","nodeId":"N2"}
       """
     When a GET request is sent to "/listings?limit=1"
-    Then the response list "listings" has 1 items
-    And the response field "nextCursor" is "lst-1"
-    When a GET request is sent to "/listings?limit=1&after=lst-1"
-    Then the response list "listings" has 1 items
-    And the response field "listings.0.listingId" is "lst-2"
+    Then the response list "items" has 1 items
+    And the response field "nextCursor" is "eyJzIjoiIiwiaSI6ImxzdC0xIn0"
+    When a GET request is sent to "/listings?limit=1&cursor=eyJzIjoiIiwiaSI6ImxzdC0xIn0"
+    Then the response list "items" has 1 items
+    And the response field "items.0.listingId" is "lst-2"
     And the response has no field "nextCursor"
 
   Scenario: Applying a feed over HTTP answers 201 APPLIED with the counters
@@ -225,10 +233,10 @@ Feature: REST API (the eight operations of apis/openapi.yaml)
     And the last "ListingAvailabilityChanged" event has "FeedID" "f1"
     And the last "InventoryFeedApplied" event has "FeedID" "f1"
     When a GET request is sent to "/listings?nodeId=N1"
-    Then the response field "listings.0.availability.availableQty" is 120
-    And the response field "listings.0.availability.basis" is "THROUGHPUT_CONSTRAINED"
-    And the response field "listings.0.availability.asOf" is "2026-10-23T10:00:00Z"
-    And the response field "listings.0.availability.feedId" is "f1"
+    Then the response field "items.0.availability.availableQty" is 120
+    And the response field "items.0.availability.basis" is "THROUGHPUT_CONSTRAINED"
+    And the response field "items.0.availability.asOf" is "2026-10-23T10:00:00Z"
+    And the response field "items.0.availability.feedId" is "f1"
     When a GET request is sent to "/inventory-feeds/f1"
     Then the response status is 200
     And the response field "state" is "APPLIED"

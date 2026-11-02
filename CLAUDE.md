@@ -23,7 +23,7 @@ Three loops are always on: the outbox relay (`OUTBOX_MAX_ATTEMPTS` default 20, 0
 Shutdown: /readyz 503, `SHUTDOWN_DRAIN_DELAY` (5s), drain HTTP, stop the loops, close pool. cmd/** never imports internal/adapters/outbound/memory or repocontract. No authentication on REST. See docs/docs/overview/runtime.md.
 
 ## REST
-chi router implementing every operation of apis/openapi.yaml (8 routes) plus /healthz, /readyz. Every state-changing route takes `Idempotency-Key` (table `idempotency_keys`, key = (route, key), 24h, replays the first response, same key + other request = 422 `idempotency-key-reused`).
+chi router implementing every operation of apis/openapi.yaml (8 routes) plus /healthz, /readyz. Every state-changing route takes `Idempotency-Key` (table `idempotency_keys`, key is global (looked up by key alone), 24h, replays the first response, same key + other request = 409 `idempotency-key-reused`).
 NUL: 404 in the path, 400 `malformed-request-query|body` elsewhere. Errors are RFC 9457 problem+json, `type` = slug: not-found, illegal-transition, concurrent-update, validation-failed + one kebab-case slug per model Err (ADR 0002 A18).
 A FAILED inventory feed answers 422 and is still stored (`keepWrites`, ADR 0005): GET /inventory-feeds/{feedId} shows it.
 

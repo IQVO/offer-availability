@@ -43,7 +43,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func decodeJSON(r *http.Request, dest any) error {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, maxBodyBytes+1))
 	if err != nil {
-		return fmt.Errorf("%w: %v", errMalformedRequest, err)
+		return fmt.Errorf("%w: %w", errMalformedRequest, err)
 	}
 	if len(raw) > maxBodyBytes {
 		return errTooLarge
@@ -54,7 +54,7 @@ func decodeJSON(r *http.Request, dest any) error {
 		if errors.Is(err, io.EOF) {
 			return fmt.Errorf("%w: a JSON body is required", errMalformedRequest)
 		}
-		return fmt.Errorf("%w: %v", errMalformedRequest, err)
+		return fmt.Errorf("%w: %w", errMalformedRequest, err)
 	}
 	if dec.More() {
 		return fmt.Errorf("%w: trailing data after the JSON body", errMalformedRequest)

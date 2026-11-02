@@ -55,12 +55,14 @@ func TestFeedMetricsCountsASupersededFeed(t *testing.T) {
 
 func TestFeedMetricsCountsAFailedFeedWithTheBrokenInvariant(t *testing.T) {
 	e, m := metricsEnv(t)
-	_, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-a", 5), ln("lst-x", 5)))
-	if err == nil {
+	got, err := apply(e, feedCmd("feed-1", false, asOf1, ln("lst-a", 5), ln("lst-x", 5)))
+	mustNot(t, err)
+	if got.failure == nil {
 		t.Fatal("a line of another node must fail the feed")
 	}
-	_, err = apply(e, feedCmd("feed-2", false, asOf1, ln("lst-b", -1)))
-	if err == nil {
+	got, err = apply(e, feedCmd("feed-2", false, asOf1, ln("lst-b", -1)))
+	mustNot(t, err)
+	if got.failure == nil {
 		t.Fatal("a negative quantity must fail the feed")
 	}
 	wantCalls(t, m, "failed/listing-not-on-node", "failed/negative-availability")

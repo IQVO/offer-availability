@@ -18,5 +18,6 @@ data:
   NODE_TOPOLOGY_CONSUMER_GROUP: {{ .Values.config.nodeTopologyConsumerGroup | quote }}
   OUTBOX_RELAY_INTERVAL: {{ .Values.config.outboxRelayInterval | quote }}
   OUTBOX_MAX_ATTEMPTS: {{ .Values.config.outboxMaxAttempts | quote }}
+  FEED_APPLY_CHUNK_SIZE: {{ .Values.config.feedApplyChunkSize | quote }}
   RETENTION_INTERVAL: {{ .Values.config.retentionInterval | quote }}
   SHUTDOWN_DRAIN_DELAY: {{ .Values.config.shutdownDrainDelay | quote }}

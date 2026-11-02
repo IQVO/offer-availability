@@ -217,7 +217,7 @@ func (w writer) save(ctx context.Context, item *catalog.Item, change func() ([]s
 	return views.CatalogItemFrom(item), nil
 }
 
-// RetirePackLevel retires (POST :retire) the active pack level of an item.
+// RetirePackLevel retires (POST .../retirements) the active pack level of an item.
 type RetirePackLevel struct{ writer }
 
 // NewRetirePackLevel builds the use case.

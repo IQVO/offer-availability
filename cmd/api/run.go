@@ -61,6 +61,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 	ad.deps.Metrics = feedMetrics
+	ad.deps.FeedChunkSize = cfg.feedChunkSize
 
 	readiness := newReadiness(ad.pool.Ping, cfg.brokers)
 	handler, err := inboundhttp.NewRouter(buildServer(ad, readiness, logger, tel.serviceName))

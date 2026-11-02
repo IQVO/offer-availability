@@ -296,7 +296,7 @@ func describe(d PackLevelDef) string {
 	return "a retired " + string(d.Level) + " level of this item"
 }
 
-// RetirePackLevel retires (POST :retire) the active definition at l. The
+// RetirePackLevel retires (POST .../retirements) the active definition at l. The
 // definition is kept, never deleted. A level with only retired history is no
 // change and raises nothing; a level never declared is ErrPackLevelNotFound.
 func (i *Item) RetirePackLevel(l PackLevel, now time.Time) ([]shared.Event, error) {

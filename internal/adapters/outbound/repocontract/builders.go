@@ -48,7 +48,7 @@ func Fed(t testing.TB, l *listing.Listing, qty int, basis listing.Basis, asOf ti
 // NewFeed builds a RECEIVED feed (version 1) of a partial submission with one line.
 func NewFeed(t testing.TB, id feed.ID, node listing.NodeID, asOf time.Time) *feed.InventoryFeed {
 	t.Helper()
-	sub, err := feed.NewSubmission(id, node, false, asOf, []feed.Line{{ListingID: "lst-1", Qty: 1, Basis: listing.BasisPhysical}})
+	sub, err := feed.NewSubmission(id, node, false, asOf, []feed.Line{{ListingID: lst1, Qty: 1, Basis: listing.BasisPhysical}})
 	if err != nil {
 		t.Fatalf("feed.NewSubmission: %v", err)
 	}

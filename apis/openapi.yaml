@@ -53,8 +53,17 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateCatalogItemRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '201':
           description: Created.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
           content:
             application/json:
               schema:
@@ -66,12 +75,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: gtin-already-assigned (identifiers.gtin belongs to another item or pack level).
+          description: gtin-already-assigned (identifiers.gtin belongs to another item or pack level), or idempotency-key-reused.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
-  /catalog-items/{catalogItemId}:discontinue:
+  /catalog-items/{catalogItemId}/discontinuations:
     post:
       tags: [Catalog items]
       operationId: discontinueCatalogItem
@@ -86,8 +95,17 @@ paths:
         - $ref: '#/components/parameters/CatalogItemId'
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '200':
           description: The item, now DISCONTINUED.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
           content:
             application/json:
               schema:
@@ -95,7 +113,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          description: concurrent-update (ErrConcurrentUpdate) after one automatic retry, or idempotency-key-reused.
           content:
             application/problem+json:
               schema:
@@ -123,7 +141,6 @@ paths:
       parameters:
         - $ref: '#/components/parameters/CatalogItemId'
         - $ref: '#/components/parameters/PackLevelPath'
-        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -131,6 +148,12 @@ paths:
             schema:
               $ref: '#/components/schemas/DeclarePackLevelRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '200':
           description: The item with its packaging.
           content:
@@ -155,7 +178,7 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
-  /catalog-items/{catalogItemId}/packaging/{level}:retire:
+  /catalog-items/{catalogItemId}/packaging/{level}/retirements:
     post:
       tags: [Catalog items]
       operationId: retirePackLevel
@@ -171,8 +194,17 @@ paths:
         - $ref: '#/components/parameters/PackLevelPath'
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '200':
           description: The item with its packaging.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
           content:
             application/json:
               schema:
@@ -184,7 +216,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          description: concurrent-update (ErrConcurrentUpdate) after one automatic retry, or idempotency-key-reused.
           content:
             application/problem+json:
               schema:
@@ -202,11 +234,11 @@ paths:
       summary: Browse the catalogue (BrowseCatalog)
       description: >-
         Open Host Service read. Items ordered by catalogItemId ascending, keyset
-        paginated: pass the previous page's nextCursor as `after`. An empty
+        paginated: pass the previous page's nextCursor as `cursor`. An empty
         result is 200 with an empty list.
       parameters:
         - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/After'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: One page of catalogue items.
@@ -214,8 +246,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CatalogPage'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /catalog/{catalogItemId}:
     get:
       tags: [Catalog]
@@ -233,6 +267,8 @@ paths:
                 $ref: '#/components/schemas/CatalogItem'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /listings:
     post:
       tags: [Listings]
@@ -254,8 +290,17 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateListingRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '201':
           description: Created.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
           content:
             application/json:
               schema:
@@ -263,7 +308,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: duplicate-listing (ErrDuplicateListing), or concurrent-update (ErrConcurrentUpdate).
+          description: duplicate-listing (ErrDuplicateListing), concurrent-update (ErrConcurrentUpdate), or idempotency-key-reused.
           content:
             application/problem+json:
               schema:
@@ -290,7 +335,7 @@ paths:
           schema:
             type: string
         - $ref: '#/components/parameters/Limit'
-        - $ref: '#/components/parameters/After'
+        - $ref: '#/components/parameters/Cursor'
       responses:
         '200':
           description: One page of matching listings.
@@ -298,8 +343,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ListingPage'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /inventory-feeds:
     post:
       tags: [Inventory feeds]
@@ -329,14 +376,23 @@ paths:
             schema:
               $ref: '#/components/schemas/ApplyInventoryFeedRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '201':
           description: The feed, APPLIED or SUPERSEDED.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/InventoryFeed'
         '409':
-          description: feed-already-applied (ErrFeedAlreadyApplied), or concurrent-update (ErrConcurrentUpdate) after one automatic retry.
+          description: feed-already-applied (ErrFeedAlreadyApplied), concurrent-update (ErrConcurrentUpdate) after one automatic retry, or idempotency-key-reused.
           content:
             application/problem+json:
               schema:
@@ -346,7 +402,8 @@ paths:
             The feed is FAILED, instance /inventory-feeds/{feedId}:
             listing-not-on-node (ErrListingNotOnNode) or negative-availability
             (ErrNegativeAvailability). Or validation-failed for a malformed or
-            oversized request (nothing is recorded).
+            request that breaks a value rule, such as more than 10000 lines
+            (nothing is recorded). A body over 64 KiB is 413.
           content:
             application/problem+json:
               schema:
@@ -372,6 +429,8 @@ paths:
                 $ref: '#/components/schemas/InventoryFeed'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   parameters:
     IdempotencyKey:
@@ -379,12 +438,16 @@ components:
       in: header
       required: true
       description: >-
-        Client-chosen key. A repeat on the same route with the same key and the
-        same request replays the first response; the same key with another body
-        is 422 idempotency-key-reused. Keys are kept for 24 hours.
+        Client-generated key, 1 to 128 printable ASCII characters, one per
+        logical submit (a retry reuses it). The key is global: a repeat with the
+        same method, path and body replays the first response (header
+        Idempotency-Replayed: true); the same key with any other request is
+        409 idempotency-key-reused. A missing key is 400 idempotency-key-required,
+        a malformed one 400 idempotency-key-invalid. Keys are kept for 24 hours.
       schema:
         type: string
-        maxLength: 200
+        minLength: 1
+        maxLength: 128
     CatalogItemId:
       name: catalogItemId
       in: path
@@ -408,16 +471,45 @@ components:
         minimum: 1
         maximum: 500
         default: 100
-    After:
-      name: after
+    Cursor:
+      name: cursor
       in: query
       required: false
       description: Keyset cursor, the nextCursor of the previous page.
       schema:
         type: string
+  headers:
+    IdempotencyReplayed:
+      description: '"true" when the response replays the first answer of the same Idempotency-Key.'
+      schema:
+        type: string
+        enum: ['true']
   responses:
+    BadRequest:
+      description: >-
+        idempotency-key-required or idempotency-key-invalid (state-changing
+        routes); invalid-limit, invalid-cursor or unknown-query-parameter (list
+        reads); malformed-request-body (bad JSON, an unknown field, a wrong
+        type, an empty body, trailing data or a NUL character) or
+        malformed-request-query (a NUL character).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
     NotFound:
       description: "not-found (ErrNotFound): an unknown catalogItemId or feedId."
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PayloadTooLarge:
+      description: "request-body-too-large: the request body is over 64 KiB."
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: "internal-error: an unmapped failure; the detail never leaks the internal message."
       content:
         application/problem+json:
           schema:
@@ -443,7 +535,10 @@ components:
             pack-quantity-immutable, pack-level-order, invalid-pack-quantity,
             invalid-pack-dimensions, invalid-pack-level, pack-level-not-found,
             negative-availability, stale-availability, node-not-sellable,
-            duplicate-listing, listing-not-on-node, feed-already-applied).
+            duplicate-listing, listing-not-on-node, feed-already-applied), or
+            a transport one (see the BadRequest, PayloadTooLarge and
+            InternalError responses; an unrouted method is 405
+            method-not-allowed).
           example: duplicate-listing
         title:
           type: string
@@ -605,7 +700,7 @@ components:
             $ref: '#/components/schemas/CatalogItem'
         nextCursor:
           type: string
-          description: Present when more items follow; pass it as `after`.
+          description: Present when more items follow; pass it as `cursor`.
     CreateListingRequest:
       type: object
       required: [catalogItemId, nodeId]
@@ -667,15 +762,15 @@ components:
           $ref: '#/components/schemas/Availability'
     ListingPage:
       type: object
-      required: [listings]
+      required: [items]
       properties:
-        listings:
+        items:
           type: array
           items:
             $ref: '#/components/schemas/Listing'
         nextCursor:
           type: string
-          description: Present when more listings follow; pass it as `after`.
+          description: Present when more listings follow; pass it as `cursor`.
     FeedLine:
       type: object
       description: One listing's declared availability. The model names lines but does not define them (ADR 0002, A12).
@@ -715,7 +810,7 @@ components:
       enum: [RECEIVED, APPLIED, FAILED, SUPERSEDED]
     InventoryFeed:
       type: object
-      required: [feedId, nodeId, fullUpdate, asOf, state, lineCount, appliedCount, staleCount, zeroedCount]
+      required: [feedId, nodeId, fullUpdate, asOf, state, lineCount, appliedCount, staleCount, zeroedCount, receivedAt]
       properties:
         feedId:
           type: string

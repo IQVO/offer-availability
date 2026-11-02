@@ -117,7 +117,7 @@ func ListingFrom(l *listing.Listing) Listing {
 
 // ListingPage is the ListingPage schema.
 type ListingPage struct {
-	Listings   []Listing `json:"listings"`
+	Items      []Listing `json:"items"`
 	NextCursor string    `json:"nextCursor,omitempty"`
 }
 
