@@ -66,7 +66,7 @@ Omitted: Postgres and Kafka as infrastructure, and the contexts with no relation
 | `shipping-and-tracking` (Generic) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemCreated` | Publisher side only |
 | `node-performance` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `InventoryFeedApplied` | Publisher side only |
 | `seller-inbound` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Publisher side only |
-| Network merchandising (human) | This context upstream | **UI** | REST `POST /catalog-items`, `POST /catalog-items/{catalogItemId}:discontinue`, packaging routes, `POST /listings` | `CreateCatalogItem`, `DiscontinueItem`, `DeclarePackLevel`, `RetirePackLevel`, `CreateListing` | Yes |
+| Network merchandising (human) | This context upstream | **UI** | REST `POST /catalog-items`, `POST /catalog-items/{catalogItemId}/discontinuations`, packaging routes, `POST /listings` | `CreateCatalogItem`, `DiscontinueItem`, `DeclarePackLevel`, `RetirePackLevel`, `CreateListing` | Yes |
 | Storefront | This context upstream | **Open Host Service** | REST `GET /catalog`, `GET /catalog/{catalogItemId}`, `GET /listings` | `BrowseCatalog`, `GetCatalogItem`, `ListListings` | Yes |
 | Agents | This context upstream | **Open Host Service** | MCP `cmd/mcp` (four read-only tools), A2A `cmd/a2a` (skills `check_availability`, `feed_outcome`) | the read use cases | Yes |
 | `network-fulfillment` (fleet, other organisation) | none | **Separate Ways** | none | none | Not applicable |

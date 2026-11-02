@@ -26,7 +26,7 @@ Its subdomain class is **Supporting** (revenue enabler, evolution Product): the 
 
 | Capability | How |
 | --- | --- |
-| Keep the item master | `POST /catalog-items`, `POST /catalog-items/{catalogItemId}:discontinue`, `GET /catalog`, `GET /catalog/{catalogItemId}`; GTIN and pack levels through `PUT /catalog-items/{catalogItemId}/packaging/{level}` and `POST .../packaging/{level}:retire` |
+| Keep the item master | `POST /catalog-items`, `POST /catalog-items/{catalogItemId}/discontinuations`, `GET /catalog`, `GET /catalog/{catalogItemId}`; GTIN and pack levels through `PUT /catalog-items/{catalogItemId}/packaging/{level}` and `POST .../packaging/{level}/retirements` |
 | List an item on a node | `POST /listings` (`GET /listings` to read); the listing starts `LIVE` only if the node is `ACTIVE` in the local node status, otherwise `SUPPRESSED` with reason `NODE_NOT_SELLABLE` |
 | Apply vendor inventory feeds | `POST /inventory-feeds`: full or partial, atomic per feed, ordered by `asOf` per node, recorded as `APPLIED`, `SUPERSEDED` or `FAILED` (`GET /inventory-feeds/{feedId}`) |
 | Follow node lifecycle | Consumes `NodeRegistered`, `NodeActivated`, `NodeSuspended` and `NodeRetired` from `retailnetwork.node-topology.events` into a local `node_status_view`; suspending or retiring a node suppresses its `LIVE` listings and activating it restores the ones suppressed for that reason |

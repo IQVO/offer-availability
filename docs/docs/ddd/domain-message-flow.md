@@ -210,7 +210,7 @@ sequenceDiagram
     participant OA
     participant DP
     participant OS
-    MER->>OA: cmd: POST /catalog-items/id:discontinue<br/>DiscontinueItem
+    MER->>OA: cmd: POST /catalog-items/id/discontinuations<br/>DiscontinueItem
     alt the item does not exist
         OA-->>MER: cmd: reply 404<br/>not-found
     else the item is already DISCONTINUED

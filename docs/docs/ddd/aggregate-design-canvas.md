@@ -69,9 +69,9 @@ own flag, `active`, not a state: a level goes from active to retired and never b
 | Command | Issued by | Inbound adapter |
 | --- | --- | --- |
 | `CreateCatalogItem` | Network merchandising | REST `POST /catalog-items` |
-| `DiscontinueItem` | Network merchandising | REST `POST /catalog-items/{catalogItemId}:discontinue` |
+| `DiscontinueItem` | Network merchandising | REST `POST /catalog-items/{catalogItemId}/discontinuations` |
 | `DeclarePackLevel` | Network merchandising | REST `PUT /catalog-items/{catalogItemId}/packaging/{level}` |
-| `RetirePackLevel` | Network merchandising | REST `POST /catalog-items/{catalogItemId}/packaging/{level}:retire` |
+| `RetirePackLevel` | Network merchandising | REST `POST /catalog-items/{catalogItemId}/packaging/{level}/retirements` |
 
 ### 7. Created Events
 

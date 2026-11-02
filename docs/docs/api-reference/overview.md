@@ -29,9 +29,9 @@ responses.
 | Tag | Endpoint | Operation id | Success |
 | --- | --- | --- | --- |
 | Catalog items | `POST /catalog-items` | `createCatalogItem` | `201`, the item (`ACTIVE`) |
-| Catalog items | `POST /catalog-items/{catalogItemId}:discontinue` | `discontinueCatalogItem` | `200`, the item (`DISCONTINUED`); its listings are suppressed |
+| Catalog items | `POST /catalog-items/{catalogItemId}/discontinuations` | `discontinueCatalogItem` | `200`, the item (`DISCONTINUED`); its listings are suppressed |
 | Catalog items | `PUT /catalog-items/{catalogItemId}/packaging/{level}` | `declarePackLevel` | `200`, the item with its packaging |
-| Catalog items | `POST /catalog-items/{catalogItemId}/packaging/{level}:retire` | `retirePackLevel` | `200`, the item |
+| Catalog items | `POST /catalog-items/{catalogItemId}/packaging/{level}/retirements` | `retirePackLevel` | `200`, the item |
 | Catalog | `GET /catalog` | `browseCatalog` | `200 {items, nextCursor?}` |
 | Catalog | `GET /catalog/{catalogItemId}` | `getCatalogItem` | `200`, the item; `404 not-found` |
 | Listings | `POST /listings` | `createListing` | `201`, the listing (`LIVE` or `SUPPRESSED`) |
@@ -42,12 +42,15 @@ responses.
 
 ## Conventions in the contract
 
-- **`Idempotency-Key`.** Required on every `POST` and `PUT` (`400 idempotency-key-required` when absent,
-  `400 idempotency-key-invalid` when over 200 printable characters). The same key with the same method, path and body
-  replays the first answer (`Idempotency-Replayed: true`, 24 hours); with another request it is
-  `422 idempotency-key-reused`. A 5xx is never stored. Implemented in `internal/adapters/inbound/http/idempotency.go`.
-- **Paging.** `GET /catalog` and `GET /listings` are keyset pages: `limit` 1 to 500 (default 100) and the opaque `after`
-  cursor (the previous page's `nextCursor`); no `nextCursor` marks the last page. A bad `limit` is `422 validation-failed`.
+- **`Idempotency-Key`.** Required on every `POST` (`PUT` is idempotent by method and takes none). 1 to 128
+  printable ASCII characters, GLOBAL: `400 idempotency-key-required` when absent, `400 idempotency-key-invalid` when
+  malformed. The same key with the same method, path and body replays the first answer (`Idempotency-Replayed: true`,
+  24 hours); with any other request it is `409 idempotency-key-reused`. A 5xx is never stored. Implemented in
+  `internal/adapters/inbound/http/idempotency.go` ([ADR 0011](/docs/adr/0011-adopt-the-fleet-rest-api-guideline)).
+- **Paging.** `GET /catalog` and `GET /listings` answer `{ "items": [...], "nextCursor": "..." }`: `limit` 1 to 500
+  (default 100) and the opaque `cursor` (the previous page's `nextCursor`); no `nextCursor` marks the last page. A bad
+  `limit` is `400 invalid-limit`, an undecodable cursor `400 invalid-cursor`, any other query parameter (`after`,
+  `offset`, ...) `400 unknown-query-parameter`.
 - **Identifiers.** `catalogItemId` is `item-<uuid>`, `listingId` is `lst-<uuid>`; `feedId` and `nodeId` are chosen by the
   caller. A GTIN is accepted as 8, 12, 13 or 14 digits and stored as 14.
 - **Request limits.** Bodies at most 64 KiB; a feed at most 10000 lines; a NUL character anywhere is `400`.
