@@ -107,6 +107,7 @@ type flakyListings struct {
 	findErr, getManyErr, byNodeErr, byItemErr, listErr error
 	saveErrs, saveManyErrs                             []error
 	saves, saveManys                                   int
+	saveManySizes                                      []int
 }
 
 func (f *flakyListings) FindByItemAndNode(ctx context.Context, i listing.ItemID, n listing.NodeID) (*listing.Listing, error) {
@@ -155,6 +156,7 @@ func (f *flakyListings) SaveMany(ctx context.Context, ls []*listing.Listing) err
 	if err := failAt(&f.saveManys, f.saveManyErrs); err != nil {
 		return err
 	}
+	f.saveManySizes = append(f.saveManySizes, len(ls))
 	return f.ListingRepository.SaveMany(ctx, ls)
 }
 
@@ -231,13 +233,15 @@ func (f *flakyInbox) MarkProcessed(ctx context.Context, id, typ string, at time.
 
 type flakyOutbox struct {
 	ports.EventOutbox
-	err error
+	err         error
+	appendSizes []int
 }
 
 func (f *flakyOutbox) Append(ctx context.Context, events ...shared.Event) error {
 	if f.err != nil {
 		return f.err
 	}
+	f.appendSizes = append(f.appendSizes, len(events))
 	return f.EventOutbox.Append(ctx, events...)
 }
 

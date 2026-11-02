@@ -3,6 +3,7 @@ package usecases
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/claudioed/offer-availability/internal/application/views"
@@ -164,12 +165,16 @@ func (uc *ApplyInventoryFeed) loadListings(ctx context.Context, sub feed.Submiss
 }
 
 // commit settles an evaluated feed as APPLIED: listings, mark, feed and events.
+// The changed listings and the raised events are written in batches of at most
+// chunkSize, so a full feed that touches every listing of a node never builds
+// one unbounded bulk save or outbox append; all-or-nothing is kept, a failing
+// batch aborts the whole unit of work.
 func (uc *ApplyInventoryFeed) commit(ctx context.Context, sub feed.Submission, f *feed.InventoryFeed, res feed.Result) (FeedResult, error) {
 	feedEvents, err := f.MarkApplied(res, uc.now())
 	if err != nil {
 		return FeedResult{}, err
 	}
-	if err := uc.Listings.SaveMany(ctx, res.Changed); err != nil {
+	if err := uc.saveChanged(ctx, res.Changed); err != nil {
 		return FeedResult{}, err
 	}
 	if err := uc.Marks.Advance(ctx, sub.NodeID, sub.AsOf); err != nil {
@@ -179,8 +184,29 @@ func (uc *ApplyInventoryFeed) commit(ctx context.Context, sub feed.Submission, f
 		return FeedResult{}, err
 	}
 	events := append(append([]shared.Event(nil), res.Events...), feedEvents...)
-	if err := uc.publish(ctx, events); err != nil {
+	if err := uc.publishInBatches(ctx, events); err != nil {
 		return FeedResult{}, err
 	}
 	return FeedResult{Feed: views.InventoryFeedFrom(f)}, nil
+}
+
+// saveChanged persists the changed listings in batches of at most chunkSize.
+func (uc *ApplyInventoryFeed) saveChanged(ctx context.Context, changed []*listing.Listing) error {
+	for batch := range slices.Chunk(changed, uc.chunkSize()) {
+		if err := uc.Listings.SaveMany(ctx, batch); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// publishInBatches appends the raised events to the outbox in batches of at
+// most chunkSize.
+func (w writer) publishInBatches(ctx context.Context, events []shared.Event) error {
+	for batch := range slices.Chunk(events, w.chunkSize()) {
+		if err := w.publish(ctx, batch); err != nil {
+			return err
+		}
+	}
+	return nil
 }

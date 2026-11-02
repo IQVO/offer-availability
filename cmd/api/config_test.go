@@ -68,7 +68,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	want := config{
 		databaseURL: "postgres://u:p@h/db", migrationsURL: "postgres://u:p@h/db", brokers: "a:9092", nodeGroup: "offer-availability",
-		addr: ":8080", relayInterval: time.Second, maxAttempts: 20, drainDelay: 5 * time.Second, retention: time.Hour,
+		addr: ":8080", relayInterval: time.Second, maxAttempts: 20, feedChunkSize: 500, drainDelay: 5 * time.Second, retention: time.Hour,
 	}
 	if cfg != want {
 		t.Fatalf("defaults = %+v, want %+v", cfg, want)
@@ -82,14 +82,15 @@ func TestLoadConfigOverrides(t *testing.T) {
 	logger, _ := quietLogger()
 	cfg, err := loadConfig(env(with(map[string]string{
 		"KAFKA_BROKERS": " a:1 , ,b:2 ", "HTTP_ADDR": ":9000", "OUTBOX_RELAY_INTERVAL": "250ms", "OUTBOX_MAX_ATTEMPTS": "0",
-		"SHUTDOWN_DRAIN_DELAY": "0", "RETENTION_INTERVAL": "5m", "MIGRATIONS_DATABASE_URL": "postgres://direct/db", "NODE_TOPOLOGY_CONSUMER_GROUP": " grp ",
+		"FEED_APPLY_CHUNK_SIZE": "250",
+		"SHUTDOWN_DRAIN_DELAY":  "0", "RETENTION_INTERVAL": "5m", "MIGRATIONS_DATABASE_URL": "postgres://direct/db", "NODE_TOPOLOGY_CONSUMER_GROUP": " grp ",
 	})), logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := config{
 		databaseURL: "postgres://u:p@h/db", migrationsURL: "postgres://direct/db", brokers: "a:1,b:2", nodeGroup: "grp",
-		addr: ":9000", relayInterval: 250 * time.Millisecond, maxAttempts: 0, drainDelay: 0, retention: 5 * time.Minute,
+		addr: ":9000", relayInterval: 250 * time.Millisecond, maxAttempts: 0, feedChunkSize: 250, drainDelay: 0, retention: 5 * time.Minute,
 	}
 	if cfg != want {
 		t.Fatalf("overrides = %+v, want %+v", cfg, want)
@@ -102,15 +103,15 @@ func TestLoadConfigOverrides(t *testing.T) {
 func TestInvalidOptionalSettingsFallBackWithAWarning(t *testing.T) {
 	logger, logs := quietLogger()
 	cfg, err := loadConfig(env(with(map[string]string{
-		"OUTBOX_RELAY_INTERVAL": "soon", "OUTBOX_MAX_ATTEMPTS": "-3", "SHUTDOWN_DRAIN_DELAY": "-1s", "RETENTION_INTERVAL": "0",
+		"OUTBOX_RELAY_INTERVAL": "soon", "OUTBOX_MAX_ATTEMPTS": "-3", "FEED_APPLY_CHUNK_SIZE": "-1", "SHUTDOWN_DRAIN_DELAY": "-1s", "RETENTION_INTERVAL": "0",
 	})), logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.relayInterval != time.Second || cfg.maxAttempts != 20 || cfg.drainDelay != 5*time.Second || cfg.retention != time.Hour {
+	if cfg.relayInterval != time.Second || cfg.maxAttempts != 20 || cfg.feedChunkSize != 500 || cfg.drainDelay != 5*time.Second || cfg.retention != time.Hour {
 		t.Fatalf("fallbacks = %+v", cfg)
 	}
-	if got := strings.Count(logs.String(), "level=WARN"); got != 4 {
+	if got := strings.Count(logs.String(), "level=WARN"); got != 5 {
 		t.Fatalf("%d warnings: %s", got, logs)
 	}
 	if parseRelayInterval("2", logger) != 2*time.Second || parseRelayInterval("0", logger) != time.Second {
@@ -118,6 +119,9 @@ func TestInvalidOptionalSettingsFallBackWithAWarning(t *testing.T) {
 	}
 	if outboxMaxAttempts("x", logger) != 20 || outboxMaxAttempts(" 7 ", logger) != 7 {
 		t.Fatal("max attempts")
+	}
+	if feedApplyChunkSize("x", logger) != 500 || feedApplyChunkSize(" 250 ", logger) != 250 {
+		t.Fatal("feed chunk size")
 	}
 }
 
