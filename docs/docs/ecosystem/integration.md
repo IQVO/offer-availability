@@ -70,7 +70,7 @@ ADR 0004). If a consumer is absent from a deployment, nothing in this service no
 
 ## Callers over REST, MCP and A2A
 
-Network merchandising (a human operator) uses `POST /catalog-items`, `POST /catalog-items/{catalogItemId}:discontinue`,
+Network merchandising (a human operator) uses `POST /catalog-items`, `POST /catalog-items/{catalogItemId}/discontinuations`,
 the packaging routes and `POST /listings`. A storefront browses `GET /catalog` and `GET /catalog/{catalogItemId}` (Open Host
 Service). Agents read through MCP and A2A. All are unauthenticated and go through Kong at `/api/offer-availability`
 (`/api/mcp/offer-availability`, `/api/a2a/offer-availability` for the optional components). The console remote in `web/`

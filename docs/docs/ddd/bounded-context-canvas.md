@@ -132,8 +132,8 @@ synchronous call here.
 | --- | --- | --- | --- | --- |
 | `vendor-connectivity` | `ApplyInventoryFeed` | Command | REST `POST /inventory-feeds` (in-organization) | Customer/Supplier (`vendor-connectivity` is the Customer) |
 | Network merchandising (human) | `CreateCatalogItem` | Command | REST `POST /catalog-items` | UI |
-| Network merchandising (human) | `DiscontinueItem` | Command | REST `POST /catalog-items/{catalogItemId}:discontinue` | UI |
-| Network merchandising (human) | `DeclarePackLevel`, `RetirePackLevel` | Command | REST `PUT /catalog-items/{catalogItemId}/packaging/{level}`, `POST /catalog-items/{catalogItemId}/packaging/{level}:retire` | UI |
+| Network merchandising (human) | `DiscontinueItem` | Command | REST `POST /catalog-items/{catalogItemId}/discontinuations` | UI |
+| Network merchandising (human) | `DeclarePackLevel`, `RetirePackLevel` | Command | REST `PUT /catalog-items/{catalogItemId}/packaging/{level}`, `POST /catalog-items/{catalogItemId}/packaging/{level}/retirements` | UI |
 | Network merchandising (human) | `CreateListing` | Command | REST `POST /listings` | UI |
 | Storefront | `BrowseCatalog`, `GetCatalogItem` | Query | REST `GET /catalog`, `GET /catalog/{catalogItemId}` | Open Host Service |
 | Any client | `ListListings`, `GetInventoryFeed` | Query | REST `GET /listings`, `GET /inventory-feeds/{feedId}` | Open Host Service |

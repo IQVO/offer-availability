@@ -6,8 +6,8 @@ import { catalogItem, feed, listing } from "./test/fixtures";
 
 describe("withQuery", () => {
   it("drops empty values and encodes the rest", () => {
-    expect(withQuery("/listings", { limit: 25, nodeId: "", catalogItemId: undefined, after: "itm 1" })).toBe(
-      "/listings?limit=25&after=itm+1",
+    expect(withQuery("/listings", { limit: 25, nodeId: "", catalogItemId: undefined, cursor: "itm 1" })).toBe(
+      "/listings?limit=25&cursor=itm+1",
     );
     expect(withQuery("/catalog", {})).toBe("/catalog");
     expect(withQuery("/catalog")).toBe("/catalog");
@@ -23,19 +23,19 @@ describe("the API base", () => {
 describe("requests", () => {
   it("browses the catalogue with the page as query parameters and no custom header", async () => {
     const api = mockApi({ "GET /catalog": json({ items: [catalogItem()], nextCursor: "item-2" }) });
-    const page = await browseCatalog({ limit: 25, after: "item-1" });
+    const page = await browseCatalog({ limit: 25, cursor: "item-1" });
     expect(page.nextCursor).toBe("item-2");
     expect(page.items).toHaveLength(1);
     const call = api.calls[0];
     expect(call.url.startsWith(OFFER_API_BASE + "/catalog?")).toBe(true);
-    expect(Object.fromEntries(call.query)).toEqual({ limit: "25", after: "item-1" });
+    expect(Object.fromEntries(call.query)).toEqual({ limit: "25", cursor: "item-1" });
     expect(call.headers).toEqual({});
   });
 
   it("issues GETs only -- the remote is read-only (ADR 0007)", async () => {
     const api = mockApi({
       "GET /catalog": json({ items: [] }),
-      "GET /listings": json({ listings: [] }),
+      "GET /listings": json({ items: [] }),
       "GET /catalog/item-1": json(catalogItem()),
       "GET /inventory-feeds/feed-7": json(feed()),
     });
@@ -52,7 +52,7 @@ describe("requests", () => {
   });
 
   it("lists listings with both filters as query parameters", async () => {
-    const api = mockApi({ "GET /listings": json({ listings: [listing()] }) });
+    const api = mockApi({ "GET /listings": json({ items: [listing()] }) });
     await listListings({ nodeId: "node-a", catalogItemId: "item-1", limit: 50 });
     expect(Object.fromEntries(api.calls[0].query)).toEqual({
       nodeId: "node-a",
@@ -74,7 +74,7 @@ describe("requests", () => {
   it("calls nothing but this context's API", async () => {
     const api = mockApi({
       "GET /catalog": json({ items: [] }),
-      "GET /listings": json({ listings: [] }),
+      "GET /listings": json({ items: [] }),
     });
     await browseCatalog({});
     await listListings({});

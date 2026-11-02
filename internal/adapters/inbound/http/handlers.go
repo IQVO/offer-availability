@@ -3,7 +3,6 @@ package http
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -16,9 +15,10 @@ import (
 
 func (s *Server) mountCatalog(r chi.Router) {
 	s.keyed(r, http.MethodPost, "/catalog-items", s.createCatalogItem)
-	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}:discontinue", s.discontinueCatalogItem)
-	s.keyed(r, http.MethodPut, "/catalog-items/{catalogItemId}/packaging/{level}", s.declarePackLevel)
-	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}/packaging/{level}:retire", s.retirePackLevel)
+	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}/discontinuations", s.discontinueCatalogItem)
+	// PUT is idempotent by method: it takes no Idempotency-Key middleware (ADR 0011).
+	r.Put("/catalog-items/{catalogItemId}/packaging/{level}", s.declarePackLevel)
+	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}/packaging/{level}/retirements", s.retirePackLevel)
 	r.Get("/catalog", s.browseCatalog)
 	r.Get("/catalog/{catalogItemId}", s.getCatalogItem)
 }
@@ -50,7 +50,7 @@ func (s *Server) createCatalogItem(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
-// discontinueCatalogItem is POST /catalog-items/{catalogItemId}:discontinue, which
+// discontinueCatalogItem is POST /catalog-items/{catalogItemId}/discontinuations, which
 // takes no body.
 func (s *Server) discontinueCatalogItem(w http.ResponseWriter, r *http.Request) {
 	item, err := s.DiscontinueItem.Execute(r.Context(), itemID(r))
@@ -76,7 +76,7 @@ func (s *Server) declarePackLevel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-// retirePackLevel is POST /catalog-items/{catalogItemId}/packaging/{level}:retire,
+// retirePackLevel is POST /catalog-items/{catalogItemId}/packaging/{level}/retirements,
 // which takes no body.
 func (s *Server) retirePackLevel(w http.ResponseWriter, r *http.Request) {
 	item, err := s.RetirePackLevel.Execute(r.Context(), itemID(r), chi.URLParam(r, "level"))
@@ -87,24 +87,9 @@ func (s *Server) retirePackLevel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
-// pageQuery reads limit and after. A limit that is not an integer is a value
-// error (validation-failed), like one out of range.
-func pageQuery(r *http.Request) (usecases.PageQuery, error) {
-	q := r.URL.Query()
-	page := usecases.PageQuery{After: q.Get("after")}
-	if raw := q.Get("limit"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil {
-			return page, shared.Invalid("limit must be an integer")
-		}
-		page.Limit = &n
-	}
-	return page, nil
-}
-
-// browseCatalog is GET /catalog?limit=&after=.
+// browseCatalog is GET /catalog?limit=&cursor=.
 func (s *Server) browseCatalog(w http.ResponseWriter, r *http.Request) {
-	page, err := pageQuery(r)
+	page, err := pageParams(r)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -114,6 +99,7 @@ func (s *Server) browseCatalog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	out.NextCursor = cursorOf(out.NextCursor)
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -142,9 +128,9 @@ func (s *Server) createListing(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, l)
 }
 
-// listListings is GET /listings?nodeId=&catalogItemId=&limit=&after=.
+// listListings is GET /listings?nodeId=&catalogItemId=&limit=&cursor=.
 func (s *Server) listListings(w http.ResponseWriter, r *http.Request) {
-	page, err := pageQuery(r)
+	page, err := pageParams(r, "nodeId", "catalogItemId")
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -157,6 +143,7 @@ func (s *Server) listListings(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
+	out.NextCursor = cursorOf(out.NextCursor)
 	writeJSON(w, http.StatusOK, out)
 }
 

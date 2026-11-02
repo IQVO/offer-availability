@@ -87,9 +87,9 @@ async function get<T>(path: string): Promise<T> {
 
 const seg = encodeURIComponent;
 
-/** GET /catalog?limit=&after= -- one keyset page of catalogue items. */
-export async function browseCatalog(q: { limit?: number; after?: string } = {}): Promise<CatalogPage> {
-  const res = await get<CatalogPage>(withQuery("/catalog", { limit: q.limit, after: q.after }));
+/** GET /catalog?limit=&cursor= -- one keyset page of catalogue items. */
+export async function browseCatalog(q: { limit?: number; cursor?: string } = {}): Promise<CatalogPage> {
+  const res = await get<CatalogPage>(withQuery("/catalog", { limit: q.limit, cursor: q.cursor }));
   return { items: res.items ?? [], nextCursor: res.nextCursor || undefined };
 }
 
@@ -98,14 +98,27 @@ export async function getCatalogItem(catalogItemId: string): Promise<CatalogItem
   return get<CatalogItem>(`/catalog/${seg(catalogItemId)}`);
 }
 
-/** GET /listings?nodeId=&catalogItemId=&limit=&after= -- the listings of a node and/or item. */
+/** GET /listings?nodeId=&catalogItemId=&limit=&cursor= -- the listings of a node and/or item. */
 export async function listListings(
-  q: { nodeId?: string; catalogItemId?: string; limit?: number; after?: string } = {},
+  q: { nodeId?: string; catalogItemId?: string; limit?: number; cursor?: string } = {},
 ): Promise<ListingPage> {
   const res = await get<ListingPage>(
-    withQuery("/listings", { nodeId: q.nodeId, catalogItemId: q.catalogItemId, limit: q.limit, after: q.after }),
+    withQuery("/listings", { nodeId: q.nodeId, catalogItemId: q.catalogItemId, limit: q.limit, cursor: q.cursor }),
   );
-  return { listings: res.listings ?? [], nextCursor: res.nextCursor || undefined };
+  return { items: res.items ?? [], nextCursor: res.nextCursor || undefined };
+}
+
+/** Follows nextCursor until it is absent (bounded) so no listing is silently truncated. */
+export async function listAllListings(q: { nodeId?: string; catalogItemId?: string }, maxPages = 20): Promise<ListingPage> {
+  const items: ListingPage["items"] = [];
+  let cursor: string | undefined;
+  for (let i = 0; i < maxPages; i++) {
+    const page = await listListings({ ...q, limit: 500, cursor });
+    items.push(...page.items);
+    if (!page.nextCursor) return { items };
+    cursor = page.nextCursor;
+  }
+  return { items };
 }
 
 /** GET /inventory-feeds/{feedId} (404 not-found for an unknown feed). */

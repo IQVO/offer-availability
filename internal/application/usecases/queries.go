@@ -112,13 +112,13 @@ func (q *ListListings) Execute(ctx context.Context, query ListListingsQuery) (vi
 	if err != nil {
 		return views.ListingPage{}, err
 	}
-	out := views.ListingPage{Listings: []views.Listing{}}
+	out := views.ListingPage{Items: []views.Listing{}}
 	for i, l := range rows {
 		if i == limit {
-			out.NextCursor = out.Listings[limit-1].ListingID
+			out.NextCursor = out.Items[limit-1].ListingID
 			break
 		}
-		out.Listings = append(out.Listings, views.ListingFrom(l))
+		out.Items = append(out.Items, views.ListingFrom(l))
 	}
 	return out, nil
 }

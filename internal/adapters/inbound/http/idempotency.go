@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"sync/atomic"
-	"unicode"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -24,7 +23,7 @@ const IdempotencyKeyHeader = "Idempotency-Key"
 const IdempotencyReplayedHeader = "Idempotency-Replayed"
 
 // MaxIdempotencyKeyLength is the longest accepted key (apis/openapi.yaml).
-const MaxIdempotencyKeyLength = 200
+const MaxIdempotencyKeyLength = 128
 
 // keyTTLInterval is the lifetime of a stored key (a Postgres interval).
 const keyTTLInterval = "24 hours"
@@ -46,10 +45,10 @@ type Idempotency func(route string) func(http.Handler) http.Handler
 //
 // The correctness argument in short:
 //
-//   - The request is identified by (route, key); its fingerprint is
+//   - The request is identified by key alone (global); its fingerprint is
 //     sha256(method, path, body). The same key with the same fingerprint replays
 //     the FIRST response (status and body, header Idempotency-Replayed: true);
-//     the same key with another fingerprint is 422 idempotency-key-reused.
+//     the same key with another fingerprint is 409 idempotency-key-reused.
 //   - Two concurrent requests with the same key race on INSERT ... ON CONFLICT
 //     DO NOTHING. Postgres serialises them on the primary-key index: the second
 //     statement blocks until the first transaction resolves, so a reader that
@@ -123,16 +122,16 @@ func keyFrom(w http.ResponseWriter, r *http.Request) (string, bool) {
 		writeProblem(w, r, idempotencyKeyRequired, "send an Idempotency-Key header with a unique value per logical request")
 		return "", false
 	}
-	if len(key) > MaxIdempotencyKeyLength || hasControl(key) {
-		writeProblem(w, r, idempotencyKeyInvalid, "the Idempotency-Key must be at most 200 printable characters")
+	if len(key) > MaxIdempotencyKeyLength || notPrintableASCII(key) {
+		writeProblem(w, r, idempotencyKeyInvalid, "the Idempotency-Key must be 1 to 128 printable ASCII characters")
 		return "", false
 	}
 	return key, true
 }
 
-func hasControl(s string) bool {
+func notPrintableASCII(s string) bool {
 	for _, c := range s {
-		if unicode.IsControl(c) {
+		if c < 0x20 || c > 0x7e {
 			return true
 		}
 	}
@@ -157,7 +156,7 @@ func (k *keyed) claim(ctx context.Context, tx pgx.Tx, key, hash string) (bool, e
 	if _, err := tx.Exec(ctx, `DELETE FROM idempotency_keys WHERE created_at < now() - interval '`+keyTTLInterval+`'`); err != nil {
 		return false, err
 	}
-	tag, err := tx.Exec(ctx, `INSERT INTO idempotency_keys (route, key, request_hash) VALUES ($1, $2, $3) ON CONFLICT (route, key) DO NOTHING`,
+	tag, err := tx.Exec(ctx, `INSERT INTO idempotency_keys (route, key, request_hash) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
 		k.route, key, hash)
 	if err != nil {
 		return false, err
@@ -166,7 +165,7 @@ func (k *keyed) claim(ctx context.Context, tx pgx.Tx, key, hash string) (bool, e
 }
 
 // replay answers a request whose key already has a committed row: the stored
-// outcome when the fingerprint matches, 422 when it does not.
+// outcome when the fingerprint matches, 409 when it does not.
 func (k *keyed) replay(w http.ResponseWriter, r *http.Request, key, hash string) {
 	var (
 		storedHash string
@@ -174,8 +173,8 @@ func (k *keyed) replay(w http.ResponseWriter, r *http.Request, key, hash string)
 		body       []byte
 	)
 	err := k.pool.QueryRow(r.Context(),
-		`SELECT request_hash, response_status, response_body FROM idempotency_keys WHERE route = $1 AND key = $2`,
-		k.route, key).Scan(&storedHash, &status, &body)
+		`SELECT request_hash, response_status, response_body FROM idempotency_keys WHERE key = $1`,
+		key).Scan(&storedHash, &status, &body)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// The row expired between the insert attempt and this read: it is a new key now.
 		writeProblem(w, r, idempotencyKeyReused, "the Idempotency-Key expired while the request was in flight; retry it")
@@ -287,8 +286,8 @@ func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, rec *capt
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE idempotency_keys SET response_status = $1, response_body = $2 WHERE route = $3 AND key = $4`,
-		rec.code, rec.body.Bytes(), k.route, key); err != nil {
+	if _, err := tx.Exec(ctx, `UPDATE idempotency_keys SET response_status = $1, response_body = $2 WHERE key = $3`,
+		rec.code, rec.body.Bytes(), key); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

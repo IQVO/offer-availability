@@ -96,7 +96,7 @@ func TestListListings(t *testing.T) {
 		page, err := q.Execute(context.Background(), query)
 		mustNot(t, err)
 		out := []string{}
-		for _, l := range page.Listings {
+		for _, l := range page.Items {
 			out = append(out, l.ListingID)
 		}
 		return out, page.NextCursor
@@ -135,7 +135,7 @@ func TestListingViewCarriesTheAvailability(t *testing.T) {
 	mustNot(t, e.store.Listings().Save(context.Background(), l))
 	page, err := usecases.NewListListings(e.deps.Listings).Execute(context.Background(), usecases.ListListingsQuery{})
 	mustNot(t, err)
-	v := page.Listings[0]
+	v := page.Items[0]
 	if v.State != "SUPPRESSED" || v.SuppressionReason != "DISCONTINUED" || v.Availability.AvailableQty != 5 ||
 		v.Availability.Basis != "PHYSICAL" || v.Availability.AsOf == nil || !v.Availability.AsOf.Equal(repoNow()) || v.Availability.FeedID != "feed-0" {
 		t.Fatalf("view = %+v", v)

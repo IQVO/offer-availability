@@ -73,7 +73,7 @@ sequenceDiagram
     participant IT as catalog.Item
     participant LI as listing.Listing
     participant DB as Repo + Outbox
-    HTTP->>UC: POST /catalog-items/<br/>id:discontinue
+    HTTP->>UC: POST /catalog-items/<br/>id/discontinuations
     rect rgb(241, 243, 245)
         UC->>DB: Catalog.Get(id)
         alt not found

@@ -13,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"unicode"
 
 	"github.com/cucumber/godog"
 
@@ -118,10 +117,10 @@ type storedAnswer struct {
 }
 
 // memoryIdempotency mirrors the contract of RequireIdempotencyKey
-// (internal/adapters/inbound/http/idempotency.go): (route, key) identifies a
+// (internal/adapters/inbound/http/idempotency.go): the key alone (global) identifies a
 // request; a repeat with the same fingerprint (method, path, body) replays the
 // FIRST response with Idempotency-Replayed: true and never calls the handler
-// again; the same key with another fingerprint is 422 idempotency-key-reused;
+// again; the same key with another fingerprint is 409 idempotency-key-reused;
 // a missing key is 400 idempotency-key-required, an unusable one 400
 // idempotency-key-invalid; a 5xx outcome is never stored so the key can retry.
 type memoryIdempotency struct {
@@ -140,7 +139,7 @@ func (m *memoryIdempotency) refuse(w http.ResponseWriter, status int, slug, titl
 	_, _ = w.Write(body)
 }
 
-func (m *memoryIdempotency) middleware(route string) func(http.Handler) http.Handler {
+func (m *memoryIdempotency) middleware(_ string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			key := r.Header.Get(oahttp.IdempotencyKeyHeader)
@@ -151,23 +150,23 @@ func (m *memoryIdempotency) middleware(route string) func(http.Handler) http.Han
 			}
 			if len(key) > oahttp.MaxIdempotencyKeyLength || hasControlChar(key) {
 				m.refuse(w, http.StatusBadRequest, "idempotency-key-invalid", "Idempotency-Key header is invalid",
-					"the Idempotency-Key must be at most 200 printable characters")
+					"the Idempotency-Key must be 1 to 128 printable ASCII characters")
 				return
 			}
-			m.handle(route, key, next, w, r)
+			m.handle(key, next, w, r)
 		})
 	}
 }
 
 // handle runs the keyed protocol for a validated key: replay a stored answer,
 // refuse a reused key, or run the handler and store its outcome.
-func (m *memoryIdempotency) handle(route, key string, next http.Handler, w http.ResponseWriter, r *http.Request) {
+func (m *memoryIdempotency) handle(key string, next http.Handler, w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	_ = r.Body.Close()
 	r.Body = io.NopCloser(bytes.NewReader(body))
 	hash := requestFingerprint(r, body)
 
-	id := route + "\x00" + key
+	id := key
 	m.mu.Lock()
 	stored, seen := m.handled[id]
 	m.mu.Unlock()
@@ -182,7 +181,7 @@ func (m *memoryIdempotency) handle(route, key string, next http.Handler, w http.
 // reuse refusal when it does not.
 func (m *memoryIdempotency) answer(w http.ResponseWriter, hash string, stored storedAnswer) {
 	if stored.hash != hash {
-		m.refuse(w, http.StatusUnprocessableEntity, "idempotency-key-reused", "Idempotency-Key was already used with a different request",
+		m.refuse(w, http.StatusConflict, "idempotency-key-reused", "Idempotency-Key was already used with a different request",
 			"the Idempotency-Key was used with a different request")
 		return
 	}
@@ -219,7 +218,7 @@ func (m *memoryIdempotency) record(id, hash string, next http.Handler, w http.Re
 
 func hasControlChar(s string) bool {
 	for _, c := range s {
-		if unicode.IsControl(c) {
+		if c < 0x20 || c > 0x7e {
 			return true
 		}
 	}

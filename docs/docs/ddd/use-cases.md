@@ -20,9 +20,9 @@ same key with the same method, path and body replays the first answer with `Idem
 | Use case | Trigger | Success | Events raised |
 | --- | --- | --- | --- |
 | `CreateCatalogItem` | `POST /catalog-items` | `201` | `CatalogItemCreated` |
-| `DiscontinueItem` | `POST /catalog-items/{catalogItemId}:discontinue` | `200` | `CatalogItemDiscontinued`, then `ListingSuppressed` per listing |
+| `DiscontinueItem` | `POST /catalog-items/{catalogItemId}/discontinuations` | `200` | `CatalogItemDiscontinued`, then `ListingSuppressed` per listing |
 | `DeclarePackLevel` | `PUT /catalog-items/{catalogItemId}/packaging/{level}` | `200` | `CatalogItemPackLevelRetired` (when it replaces an active level), `CatalogItemPackagingDeclared` |
-| `RetirePackLevel` | `POST /catalog-items/{catalogItemId}/packaging/{level}:retire` | `200` | `CatalogItemPackLevelRetired` |
+| `RetirePackLevel` | `POST /catalog-items/{catalogItemId}/packaging/{level}/retirements` | `200` | `CatalogItemPackLevelRetired` |
 | `CreateListing` | `POST /listings` | `201` | `ListingCreated`, and `ListingSuppressed` when it starts suppressed |
 | `ApplyInventoryFeed` | `POST /inventory-feeds` | `201`, or `422` for a recorded `FAILED` feed | `ListingAvailabilityChanged` per changed listing, then `InventoryFeedApplied` |
 | `ApplyNodeEvent` | node-topology event on Kafka | offset committed | `ListingSuppressed` or `ListingRestored` per affected listing |
@@ -115,9 +115,9 @@ same key with the same method, path and body replays the first answer with `Idem
 
 | Use case | Inputs | Result |
 | --- | --- | --- |
-| `BrowseCatalog` | `limit` 1..500 (default 100), `after` cursor | Items by id ascending, with `nextCursor` when another page exists |
+| `BrowseCatalog` | `limit` 1..500 (default 100), `cursor` | Items by id ascending, with `nextCursor` when another page exists |
 | `GetCatalogItem` | item id | The item with `identifiers` and `packaging`, or `not-found` |
-| `ListListings` | optional `nodeId`, `catalogItemId` (combine with AND), `limit`, `after` | Listings by id ascending with `nextCursor` |
+| `ListListings` | optional `nodeId`, `catalogItemId` (combine with AND), `limit`, `cursor` | Listings by id ascending with `nextCursor` |
 | `GetInventoryFeed` | feed id | The feed and its outcome (state, counters, `failureCode`), or `not-found` |
 
 A `limit` outside 1 to 500 is `validation-failed` (422). The cursor is the last returned id.

@@ -35,7 +35,7 @@ export function ListingsScreen() {
     () =>
       listListings({
         limit: 25,
-        after: cursor || undefined,
+        cursor: cursor || undefined,
         nodeId: applied.nodeId || undefined,
         catalogItemId: applied.catalogItemId || undefined,
       }),
@@ -107,13 +107,13 @@ export function ListingsScreen() {
         <RequestView
           state={page}
           what="listings"
-          isEmpty={(p) => p.listings.length === 0}
+          isEmpty={(p) => p.items.length === 0}
           empty={cursors.length === 1 ? "No listing matches these filters." : "No more listings on this page."}
         >
           {(p) => (
             <DataTable
               rowKey={(l) => l.listingId}
-              rows={p.listings}
+              rows={p.items}
               columns={[
                 { key: "listing", header: "Listing", render: (l) => l.listingId },
                 { key: "node", header: "Node", render: (l) => l.nodeId },

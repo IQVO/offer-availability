@@ -158,12 +158,12 @@ by the node-topology consumer. The chart's `otel.*` values render the env.
 
 Contract: [`apis/openapi.yaml`](apis/openapi.yaml). No authentication. Errors are RFC 9457 `application/problem+json` (`type` is a slug such as
 `not-found`, `validation-failed`, `concurrent-update`, `duplicate-listing`, `feed-already-applied`, `invalid-gtin`, `gtin-already-assigned`, `pack-quantity-immutable`).
-Every state-changing request needs an `Idempotency-Key` header: a repeat with the same request replays the first response for 24 hours.
+Every `POST` needs an `Idempotency-Key` header (1 to 128 printable ASCII characters, global): a repeat with the same request replays the first response for 24 hours (`Idempotency-Replayed: true`); the same key with another request is `409 idempotency-key-reused`. List reads answer `{items,nextCursor}` (`limit`, `cursor`); see [ADR 0011](docs/adr/0011-adopt-the-fleet-rest-api-guideline.md).
 
 | Method and path | Operation |
 | --- | --- |
-| `POST /catalog-items`, `POST /catalog-items/{catalogItemId}:discontinue` | create, discontinue |
-| `PUT /catalog-items/{catalogItemId}/packaging/{level}`, `POST /catalog-items/{catalogItemId}/packaging/{level}:retire` | declare, retire a pack level |
+| `POST /catalog-items`, `POST /catalog-items/{catalogItemId}/discontinuations` | create, discontinue |
+| `PUT /catalog-items/{catalogItemId}/packaging/{level}`, `POST /catalog-items/{catalogItemId}/packaging/{level}/retirements` | declare, retire a pack level |
 | `GET /catalog`, `GET /catalog/{catalogItemId}` | browse (keyset pages), read |
 | `POST /listings`, `GET /listings?nodeId=&catalogItemId=` | create, list |
 | `POST /inventory-feeds`, `GET /inventory-feeds/{feedId}` | apply a feed, read its outcome |

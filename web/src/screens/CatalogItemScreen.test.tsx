@@ -20,7 +20,7 @@ describe("CatalogItemRoute", () => {
     mockApi({
       "GET /catalog/item-1": json(catalogItem()),
       "GET /listings": json({
-        listings: [
+        items: [
           listing(),
           listing({ listingId: "lst-2", nodeId: "node-b", state: "SUPPRESSED", suppressionReason: "NODE_NOT_SELLABLE", availability: { availableQty: 0, basis: "UNKNOWN" } }),
         ],
@@ -49,7 +49,7 @@ describe("CatalogItemRoute", () => {
           ],
         }),
       ),
-      "GET /listings": json({ listings: [listing({ ownerRef: "seller-42" })] }),
+      "GET /listings": json({ items: [listing({ ownerRef: "seller-42" })] }),
     });
     renderAt("/catalog/item-1");
     expect(await screen.findByText("00614141000232")).toBeInTheDocument();
@@ -61,7 +61,7 @@ describe("CatalogItemRoute", () => {
   it("says so when no node lists the item", async () => {
     mockApi({
       "GET /catalog/item-1": json(catalogItem()),
-      "GET /listings": json({ listings: [] }),
+      "GET /listings": json({ items: [] }),
     });
     renderAt("/catalog/item-1");
     expect(await screen.findByText("No node lists this item.")).toBeInTheDocument();
@@ -70,7 +70,7 @@ describe("CatalogItemRoute", () => {
   it("shows the not-found problem of an unknown item", async () => {
     mockApi({
       "GET /catalog/item-none": problem(404, "not-found", "Resource not found", "no catalogue item item-none"),
-      "GET /listings": json({ listings: [] }),
+      "GET /listings": json({ items: [] }),
     });
     renderAt("/catalog/item-none");
     const alert = await screen.findByRole("alert");
@@ -81,7 +81,7 @@ describe("CatalogItemRoute", () => {
   it("sends the item filter of the listings read", async () => {
     const api = mockApi({
       "GET /catalog/item-1": json(catalogItem()),
-      "GET /listings": json({ listings: [listing()] }),
+      "GET /listings": json({ items: [listing()] }),
     });
     renderAt("/catalog/item-1");
     await screen.findByRole("link", { name: "feed-7" });
@@ -91,7 +91,7 @@ describe("CatalogItemRoute", () => {
   it("links carry the encoded ids", async () => {
     mockApi({
       "GET /catalog/item%201": json(catalogItem({ catalogItemId: "item 1" })),
-      "GET /listings": json({ listings: [listing({ catalogItemId: "item 1" })] }),
+      "GET /listings": json({ items: [listing({ catalogItemId: "item 1" })] }),
     });
     renderAt("/catalog/item%201");
     expect(await screen.findByRole("heading", { name: "Item item 1" })).toBeInTheDocument();

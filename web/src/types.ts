@@ -71,7 +71,7 @@ export interface Listing {
 
 /** The ListingPage schema. */
 export interface ListingPage {
-  listings: Listing[];
+  items: Listing[];
   nextCursor?: string;
 }
 
