@@ -12,11 +12,11 @@ registered in `internal/adapters/inbound/http/handlers.go`, wired in
 `cmd/api/run.go` `buildServer`):
 
 - `POST /catalog-items` -> `CreateCatalogItem` (201)
-- `POST /catalog-items/{catalogItemId}:discontinue` -> `DiscontinueItem` (200, no body)
-- `GET /catalog?limit=&after=` -> `BrowseCatalog` (`{"items":[...],"nextCursor"}`)
+- `POST /catalog-items/{catalogItemId}/discontinuations` -> `DiscontinueItem` (200, no body)
+- `GET /catalog?limit=&cursor=` -> `BrowseCatalog` (`{"items":[...],"nextCursor"}`)
 - `GET /catalog/{catalogItemId}` -> `GetCatalogItem`
 - `POST /listings` -> `CreateListing` (201)
-- `GET /listings?nodeId=&catalogItemId=&limit=&after=` -> `ListListings`
+- `GET /listings?nodeId=&catalogItemId=&limit=&cursor=` -> `ListListings`
   (`{"listings":[...],"nextCursor"}`)
 - `POST /inventory-feeds` -> `ApplyInventoryFeed` (201 for an `APPLIED` or
   `SUPERSEDED` feed, 422 for a `FAILED` one)
@@ -38,7 +38,7 @@ registered in `internal/adapters/inbound/http/handlers.go`, wired in
   `FAILED` and its `failureCode`.
 - **Idempotency-Key** is required on all four state-changing routes
   (`idempotency.go`): same key + same request replays the first response
-  (`Idempotency-Replayed: true`), same key + other request is 422
+  (`Idempotency-Replayed: true`), same key + other request is 409
   `idempotency-key-reused`, missing key 400 `idempotency-key-required`, keys live
   24 h in `idempotency_keys`. A new state-changing route registers through
   `Server.keyed`, never `r.Post`.
