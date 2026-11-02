@@ -1,0 +1,70 @@
+---
+id: retire-pack-level
+title: "Retire the active pack level of a catalogue item (RetirePackLevel)"
+description: "Retires the active definition at the level and publishes CatalogItemPackLevelRetired. The definition is kept (active false), its GTIN is never reusable. A level that only has retired history is returned unchanged and publishes nothing; a level never declared is 404 pack-level-not-found. Takes no body."
+sidebar_label: "Retire the active pack level of a catalogue item (RetirePackLevel)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/offer-availability-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Retire the active pack level of a catalogue item (RetirePackLevel)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/catalog-items/{catalogItemId}/packaging/{level}:retire"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Retires the active definition at the level and publishes CatalogItemPackLevelRetired. The definition is kept (active false), its GTIN is never reusable. A level that only has retired history is returned unchanged and publishes nothing; a level never declared is 404 pack-level-not-found. Takes no body.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./retire-pack-level.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./retire-pack-level.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./retire-pack-level.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

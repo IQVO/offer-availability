@@ -1,0 +1,70 @@
+---
+id: discontinue-catalog-item
+title: "Discontinue a catalogue item (DiscontinueItem)"
+description: "Moves the item from ACTIVE to DISCONTINUED, publishes CatalogItemDiscontinued and, in the same transaction, suppresses every LIVE or node-suppressed listing of the item with reason DISCONTINUED (one ListingSuppressed each; Gap Register G24). Discontinuing a DISCONTINUED item returns it unchanged and publishes nothing."
+sidebar_label: "Discontinue a catalogue item (DiscontinueItem)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/offer-availability-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Discontinue a catalogue item (DiscontinueItem)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/catalog-items/{catalogItemId}:discontinue"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Moves the item from ACTIVE to DISCONTINUED, publishes CatalogItemDiscontinued and, in the same transaction, suppresses every LIVE or node-suppressed listing of the item with reason DISCONTINUED (one ListingSuppressed each; Gap Register G24). Discontinuing a DISCONTINUED item returns it unchanged and publishes nothing.
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./discontinue-catalog-item.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./discontinue-catalog-item.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./discontinue-catalog-item.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

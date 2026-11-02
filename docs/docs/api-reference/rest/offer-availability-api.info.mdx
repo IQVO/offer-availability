@@ -1,0 +1,47 @@
+---
+id: offer-availability-api
+title: "Offer & Availability API"
+description: "REST contract of the offer-availability bounded context of the retail network, derived from retail-network-docs model/model.yaml (contexts[offer-availability].rest, .aggregates, .publishes, conventions.errors) and adjusted by the final cross-context decisions (Gap Register G23 and G24). The context owns the catalogue items, one listing per (catalogue item, node) and the vendor-declared available quantity of each listing with its basis. POST /inventory-feeds is an in-organization call made by vendor-connectivity while it processes a vendor's inventory submission; vendors never call this API directly. Network merchandising calls the catalogue and listing writes; the storefront reads GET /catalog (Open Host Service). No authentication, consistent with the fleet. Errors are RFC 9457 problem details. The shared problem types are not-found (404), illegal-transition (409), concurrent-update (409) and validation-failed (422); the others are this context's invariants, one slug per model Err name."
+sidebar_label: Introduction
+sidebar_position: 0
+hide_title: true
+custom_edit_url: null
+---
+
+import ApiLogo from "@theme/ApiLogo";
+import Heading from "@theme/Heading";
+import SchemaTabs from "@theme/SchemaTabs";
+import TabItem from "@theme/TabItem";
+import Export from "@theme/ApiExplorer/Export";
+
+<span
+  className={"theme-doc-version-badge badge badge--secondary"}
+  children={"Version: 0.1.0"}
+>
+</span>
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Offer & Availability API"}
+>
+</Heading>
+
+
+
+REST contract of the offer-availability bounded context of the retail network, derived from retail-network-docs model/model.yaml (contexts[offer-availability].rest, .aggregates, .publishes, conventions.errors) and adjusted by the final cross-context decisions (Gap Register G23 and G24). The context owns the catalogue items, one listing per (catalogue item, node) and the vendor-declared available quantity of each listing with its basis. POST /inventory-feeds is an in-organization call made by vendor-connectivity while it processes a vendor's inventory submission; vendors never call this API directly. Network merchandising calls the catalogue and listing writes; the storefront reads GET /catalog (Open Host Service). No authentication, consistent with the fleet. Errors are RFC 9457 problem details. The shared problem types are not-found (404), illegal-transition (409), concurrent-update (409) and validation-failed (422); the others are this context's invariants, one slug per model Err name.
+
+<div
+  style={{"display":"flex","flexDirection":"column","marginBottom":"var(--ifm-paragraph-margin-bottom)"}}
+>
+  <h3
+    style={{"marginBottom":"0.25rem"}}
+  >
+    Contact
+  </h3><span>
+    offer-availability maintainers: 
+  </span><span>
+    URL: [https://github.com/IQVO/offer-availability](https://github.com/IQVO/offer-availability)
+  </span>
+</div>
+      
