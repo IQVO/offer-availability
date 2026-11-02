@@ -13,11 +13,11 @@ import (
 
 var listingCases = []named{
 	{"save then get round-trips the snapshot with its availability", listingRoundTrip},
-	{"get of an unknown id is ErrNotFound", listingGetMiss},
+	{caseGetMiss, listingGetMiss},
 	{"find by item and node hits and misses", listingFind},
 	{"a second listing for the same item and node is ErrDuplicateListing", listingDuplicate},
-	{"creating an id that exists is ErrConcurrentUpdate", listingDuplicateID},
-	{"an update expects the stored version to be version-1", listingUpdateVersions},
+	{caseDuplicateID, listingDuplicateID},
+	{caseVersionRace, listingUpdateVersions},
 	{"get many returns the stored ones by id and ignores the rest", listingGetMany},
 	{"list by node and by item return every listing by id", listingListByKey},
 	{"list filters by node and item and pages by id", listingListFiltered},
@@ -43,7 +43,7 @@ func listingIDs(ls []*listing.Listing) []listing.ID {
 func listingRoundTrip(t *testing.T, f Fixture) {
 	ctx := context.Background()
 	// Store the first version the way the service does, then one save per change.
-	l := NewListing(t, "lst-1", "item-1", "node-1")
+	l := NewListing(t, lst1, item1, node1)
 	noErr(t, f.Listings.Save(ctx, l))
 	Fed(t, l, 12, listing.BasisThroughputConstrained, Now.Add(time.Hour))
 	noErr(t, f.Listings.Save(ctx, l))
@@ -51,7 +51,7 @@ func listingRoundTrip(t *testing.T, f Fixture) {
 		t.Fatal(err)
 	}
 	noErr(t, f.Listings.Save(ctx, l))
-	got, err := f.Listings.Get(ctx, "lst-1")
+	got, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
 	if !reflect.DeepEqual(got.Snapshot(), l.Snapshot()) {
 		t.Fatalf("snapshot = %+v, want %+v", got.Snapshot(), l.Snapshot())
@@ -65,13 +65,13 @@ func listingGetMiss(t *testing.T, f Fixture) {
 
 func listingFind(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-1", "item-1", "node-1"})
-	got, err := f.Listings.FindByItemAndNode(ctx, "item-1", "node-1")
+	seedListings(t, f, [3]string{lst1, item1, node1})
+	got, err := f.Listings.FindByItemAndNode(ctx, item1, node1)
 	noErr(t, err)
-	if got.ID() != "lst-1" {
+	if got.ID() != lst1 {
 		t.Fatalf("id = %s, want lst-1", got.ID())
 	}
-	for _, pair := range [][2]string{{"item-1", "node-2"}, {"item-2", "node-1"}} {
+	for _, pair := range [][2]string{{item1, node2}, {item2, node1}} {
 		_, err = f.Listings.FindByItemAndNode(ctx, listing.ItemID(pair[0]), listing.NodeID(pair[1]))
 		wantErr(t, err, ports.ErrNotFound)
 	}
@@ -79,31 +79,31 @@ func listingFind(t *testing.T, f Fixture) {
 
 func listingDuplicate(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-1", "item-1", "node-1"})
-	wantErr(t, f.Listings.Save(ctx, NewListing(t, "lst-2", "item-1", "node-1")), listing.ErrDuplicateListing)
-	if _, err := f.Listings.Get(ctx, "lst-2"); err == nil {
+	seedListings(t, f, [3]string{lst1, item1, node1})
+	wantErr(t, f.Listings.Save(ctx, NewListing(t, lst2, item1, node1)), listing.ErrDuplicateListing)
+	if _, err := f.Listings.Get(ctx, lst2); err == nil {
 		t.Fatal("the rejected listing was stored")
 	}
-	noErr(t, f.Listings.Save(ctx, NewListing(t, "lst-3", "item-1", "node-2")))
-	noErr(t, f.Listings.Save(ctx, NewListing(t, "lst-4", "item-2", "node-1")))
+	noErr(t, f.Listings.Save(ctx, NewListing(t, lst3, item1, node2)))
+	noErr(t, f.Listings.Save(ctx, NewListing(t, lst4, item2, node1)))
 }
 
 func listingDuplicateID(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-1", "item-1", "node-1"})
-	wantErr(t, f.Listings.Save(ctx, NewListing(t, "lst-1", "item-2", "node-2")), ports.ErrConcurrentUpdate)
+	seedListings(t, f, [3]string{lst1, item1, node1})
+	wantErr(t, f.Listings.Save(ctx, NewListing(t, lst1, item2, node2)), ports.ErrConcurrentUpdate)
 }
 
 func listingUpdateVersions(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-1", "item-1", "node-1"})
-	loaded, err := f.Listings.Get(ctx, "lst-1")
+	seedListings(t, f, [3]string{lst1, item1, node1})
+	loaded, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
-	stale, err := f.Listings.Get(ctx, "lst-1")
+	stale, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
 	noErr(t, f.Listings.Save(ctx, Fed(t, loaded, 5, listing.BasisPhysical, Now.Add(time.Hour))))
 	wantErr(t, f.Listings.Save(ctx, Fed(t, stale, 6, listing.BasisPhysical, Now.Add(time.Hour))), ports.ErrConcurrentUpdate)
-	got, err := f.Listings.Get(ctx, "lst-1")
+	got, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
 	if got.Availability().Qty != 5 || got.Version() != 2 {
 		t.Fatalf("stored listing = qty %d v%d", got.Availability().Qty, got.Version())
@@ -114,10 +114,10 @@ func listingUpdateVersions(t *testing.T, f Fixture) {
 
 func listingGetMany(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-c", "item-1", "node-1"}, [3]string{"lst-a", "item-2", "node-1"}, [3]string{"lst-b", "item-3", "node-2"})
-	got, err := f.Listings.GetMany(ctx, []listing.ID{"lst-c", "lst-zzz", "lst-a"})
+	seedListings(t, f, [3]string{lstC, item1, node1}, [3]string{lstA, item2, node1}, [3]string{lstB, "item-3", node2})
+	got, err := f.Listings.GetMany(ctx, []listing.ID{lstC, "lst-zzz", lstA})
 	noErr(t, err)
-	if want := []listing.ID{"lst-a", "lst-c"}; !reflect.DeepEqual(listingIDs(got), want) {
+	if want := []listing.ID{lstA, lstC}; !reflect.DeepEqual(listingIDs(got), want) {
 		t.Fatalf("ids = %v, want %v", listingIDs(got), want)
 	}
 	none, err := f.Listings.GetMany(ctx, nil)
@@ -129,15 +129,15 @@ func listingGetMany(t *testing.T, f Fixture) {
 
 func listingListByKey(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-c", "item-1", "node-1"}, [3]string{"lst-a", "item-2", "node-1"}, [3]string{"lst-b", "item-1", "node-2"})
-	byNode, err := f.Listings.ListByNode(ctx, "node-1")
+	seedListings(t, f, [3]string{lstC, item1, node1}, [3]string{lstA, item2, node1}, [3]string{lstB, item1, node2})
+	byNode, err := f.Listings.ListByNode(ctx, node1)
 	noErr(t, err)
-	if want := []listing.ID{"lst-a", "lst-c"}; !reflect.DeepEqual(listingIDs(byNode), want) {
+	if want := []listing.ID{lstA, lstC}; !reflect.DeepEqual(listingIDs(byNode), want) {
 		t.Fatalf("by node = %v, want %v", listingIDs(byNode), want)
 	}
-	byItem, err := f.Listings.ListByItem(ctx, "item-1")
+	byItem, err := f.Listings.ListByItem(ctx, item1)
 	noErr(t, err)
-	if want := []listing.ID{"lst-b", "lst-c"}; !reflect.DeepEqual(listingIDs(byItem), want) {
+	if want := []listing.ID{lstB, lstC}; !reflect.DeepEqual(listingIDs(byItem), want) {
 		t.Fatalf("by item = %v, want %v", listingIDs(byItem), want)
 	}
 	none, err := f.Listings.ListByNode(ctx, "node-9")
@@ -149,8 +149,8 @@ func listingListByKey(t *testing.T, f Fixture) {
 
 func listingListFiltered(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-1", "item-1", "node-1"}, [3]string{"lst-2", "item-2", "node-1"},
-		[3]string{"lst-3", "item-1", "node-2"}, [3]string{"lst-4", "item-3", "node-1"})
+	seedListings(t, f, [3]string{lst1, item1, node1}, [3]string{lst2, item2, node1},
+		[3]string{lst3, item1, node2}, [3]string{lst4, "item-3", node1})
 	list := func(fl repository.ListingFilter, p repository.Page) []listing.ID {
 		rows, err := f.Listings.List(ctx, fl, p)
 		noErr(t, err)
@@ -162,13 +162,13 @@ func listingListFiltered(t *testing.T, f Fixture) {
 		p    repository.Page
 		want []listing.ID
 	}{
-		{"no filter", repository.ListingFilter{}, repository.Page{Limit: 10}, []listing.ID{"lst-1", "lst-2", "lst-3", "lst-4"}},
-		{"node", repository.ListingFilter{NodeID: "node-1"}, repository.Page{Limit: 10}, []listing.ID{"lst-1", "lst-2", "lst-4"}},
-		{"item", repository.ListingFilter{ItemID: "item-1"}, repository.Page{Limit: 10}, []listing.ID{"lst-1", "lst-3"}},
-		{"node and item", repository.ListingFilter{NodeID: "node-1", ItemID: "item-1"}, repository.Page{Limit: 10}, []listing.ID{"lst-1"}},
+		{"no filter", repository.ListingFilter{}, repository.Page{Limit: 10}, []listing.ID{lst1, lst2, lst3, lst4}},
+		{"node", repository.ListingFilter{NodeID: node1}, repository.Page{Limit: 10}, []listing.ID{lst1, lst2, lst4}},
+		{"item", repository.ListingFilter{ItemID: item1}, repository.Page{Limit: 10}, []listing.ID{lst1, lst3}},
+		{"node and item", repository.ListingFilter{NodeID: node1, ItemID: item1}, repository.Page{Limit: 10}, []listing.ID{lst1}},
 		{"no match", repository.ListingFilter{NodeID: "node-9"}, repository.Page{Limit: 10}, []listing.ID{}},
-		{"first page", repository.ListingFilter{NodeID: "node-1"}, repository.Page{Limit: 2}, []listing.ID{"lst-1", "lst-2"}},
-		{"next page", repository.ListingFilter{NodeID: "node-1"}, repository.Page{After: "lst-2", Limit: 2}, []listing.ID{"lst-4"}},
+		{"first page", repository.ListingFilter{NodeID: node1}, repository.Page{Limit: 2}, []listing.ID{lst1, lst2}},
+		{"next page", repository.ListingFilter{NodeID: node1}, repository.Page{After: lst2, Limit: 2}, []listing.ID{lst4}},
 	}
 	for _, c := range cases {
 		if got := list(c.fl, c.p); !reflect.DeepEqual(got, c.want) {
@@ -179,33 +179,33 @@ func listingListFiltered(t *testing.T, f Fixture) {
 
 func listingSaveMany(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	seedListings(t, f, [3]string{"lst-1", "item-1", "node-1"}, [3]string{"lst-2", "item-2", "node-1"})
-	a, err := f.Listings.Get(ctx, "lst-1")
+	seedListings(t, f, [3]string{lst1, item1, node1}, [3]string{lst2, item2, node1})
+	a, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
-	b, err := f.Listings.Get(ctx, "lst-2")
+	b, err := f.Listings.Get(ctx, lst2)
 	noErr(t, err)
 	noErr(t, f.Listings.SaveMany(ctx, []*listing.Listing{
 		Fed(t, a, 1, listing.BasisPhysical, Now.Add(time.Hour)), Fed(t, b, 2, listing.BasisPhysical, Now.Add(time.Hour)),
 	}))
-	a2, err := f.Listings.Get(ctx, "lst-1")
+	a2, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
-	b2, err := f.Listings.Get(ctx, "lst-2")
+	b2, err := f.Listings.Get(ctx, lst2)
 	noErr(t, err)
 	if a2.Availability().Qty != 1 || b2.Availability().Qty != 2 {
 		t.Fatalf("quantities = %d, %d", a2.Availability().Qty, b2.Availability().Qty)
 	}
 	// The second entry is stale: the first must not be stored either.
-	first, err := f.Listings.Get(ctx, "lst-1")
+	first, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
-	stale, err := f.Listings.Get(ctx, "lst-2")
+	stale, err := f.Listings.Get(ctx, lst2)
 	noErr(t, err)
-	moved, err := f.Listings.Get(ctx, "lst-2")
+	moved, err := f.Listings.Get(ctx, lst2)
 	noErr(t, err)
 	noErr(t, f.Listings.Save(ctx, Fed(t, moved, 7, listing.BasisPhysical, Now.Add(2*time.Hour))))
 	wantErr(t, f.Listings.SaveMany(ctx, []*listing.Listing{
 		Fed(t, first, 10, listing.BasisPhysical, Now.Add(2*time.Hour)), Fed(t, stale, 99, listing.BasisPhysical, Now.Add(3*time.Hour)),
 	}), ports.ErrConcurrentUpdate)
-	again, err := f.Listings.Get(ctx, "lst-1")
+	again, err := f.Listings.Get(ctx, lst1)
 	noErr(t, err)
 	if again.Availability().Qty != 1 {
 		t.Fatalf("a failed SaveMany stored the first listing: qty %d", again.Availability().Qty)

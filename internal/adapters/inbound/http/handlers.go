@@ -14,22 +14,22 @@ import (
 )
 
 func (s *Server) mountCatalog(r chi.Router) {
-	s.keyed(r, http.MethodPost, "/catalog-items", s.createCatalogItem)
-	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}/discontinuations", s.discontinueCatalogItem)
+	s.keyed(r, "/catalog-items", s.createCatalogItem)
+	s.keyed(r, "/catalog-items/{catalogItemId}/discontinuations", s.discontinueCatalogItem)
 	// PUT is idempotent by method: it takes no Idempotency-Key middleware (ADR 0011).
 	r.Put("/catalog-items/{catalogItemId}/packaging/{level}", s.declarePackLevel)
-	s.keyed(r, http.MethodPost, "/catalog-items/{catalogItemId}/packaging/{level}/retirements", s.retirePackLevel)
+	s.keyed(r, "/catalog-items/{catalogItemId}/packaging/{level}/retirements", s.retirePackLevel)
 	r.Get("/catalog", s.browseCatalog)
 	r.Get("/catalog/{catalogItemId}", s.getCatalogItem)
 }
 
 func (s *Server) mountListings(r chi.Router) {
-	s.keyed(r, http.MethodPost, "/listings", s.createListing)
+	s.keyed(r, "/listings", s.createListing)
 	r.Get("/listings", s.listListings)
 }
 
 func (s *Server) mountFeeds(r chi.Router) {
-	s.keyed(r, http.MethodPost, "/inventory-feeds", s.applyInventoryFeed)
+	s.keyed(r, "/inventory-feeds", s.applyInventoryFeed)
 	r.Get("/inventory-feeds/{feedId}", s.getInventoryFeed)
 }
 

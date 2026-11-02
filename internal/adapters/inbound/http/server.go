@@ -24,14 +24,13 @@ type (
 	createCatalogItem interface {
 		Execute(context.Context, usecases.CreateCatalogItemCommand) (views.CatalogItem, error)
 	}
-	discontinueItem interface {
+	// catalogItemByID is the contract the item get and discontinue use cases
+	// share: one catalogue item id in, its view out.
+	catalogItemByID interface {
 		Execute(context.Context, catalog.ID) (views.CatalogItem, error)
 	}
 	browseCatalog interface {
 		Execute(context.Context, usecases.PageQuery) (views.CatalogPage, error)
-	}
-	getCatalogItem interface {
-		Execute(context.Context, catalog.ID) (views.CatalogItem, error)
 	}
 	createListing interface {
 		Execute(context.Context, usecases.CreateListingCommand) (views.Listing, error)
@@ -56,11 +55,11 @@ type (
 // Server holds everything the router needs; cmd/api fills every field.
 type Server struct {
 	CreateCatalogItem  createCatalogItem
-	DiscontinueItem    discontinueItem
+	DiscontinueItem    catalogItemByID
 	DeclarePackLevel   declarePackLevel
 	RetirePackLevel    retirePackLevel
 	BrowseCatalog      browseCatalog
-	GetCatalogItem     getCatalogItem
+	GetCatalogItem     catalogItemByID
 	CreateListing      createListing
 	ListListings       listListings
 	ApplyInventoryFeed applyInventoryFeed
@@ -126,10 +125,10 @@ func NewRouter(s *Server) (http.Handler, error) {
 	return r, nil
 }
 
-// keyed registers a state-changing route behind the Idempotency-Key
+// keyed registers a POST state-changing route behind the Idempotency-Key
 // middleware. The route string ("POST /listings") is the idempotency scope.
-func (s *Server) keyed(r chi.Router, method, pattern string, h http.HandlerFunc) {
-	r.With(s.Idempotency(method+" "+pattern)).MethodFunc(method, pattern, h)
+func (s *Server) keyed(r chi.Router, pattern string, h http.HandlerFunc) {
+	r.With(s.Idempotency(http.MethodPost+" "+pattern)).MethodFunc(http.MethodPost, pattern, h)
 }
 
 // recoverer turns a panic into a 500 problem and logs it.

@@ -278,7 +278,7 @@ func (w *world) requestFails(name string) error {
 		return fmt.Errorf("the scenario names an unknown error %q", name)
 	}
 	if !errors.Is(w.err, want) {
-		return fmt.Errorf("the request failed with %v, want %s", w.err, name)
+		return fmt.Errorf("the request failed with %w, want %s", w.err, name)
 	}
 	return nil
 }

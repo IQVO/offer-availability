@@ -19,9 +19,9 @@ var markCases = []named{
 
 var nodeStatusCases = []named{
 	{"save then get round-trips the snapshot", nodeRoundTrip},
-	{"get of an unknown id is ErrNotFound", nodeGetMiss},
-	{"creating an id that exists is ErrConcurrentUpdate", nodeDuplicateID},
-	{"an update expects the stored version to be version-1", nodeUpdateVersions},
+	{caseGetMiss, nodeGetMiss},
+	{caseDuplicateID, nodeDuplicateID},
+	{caseVersionRace, nodeUpdateVersions},
 }
 
 var inboxCases = []named{
@@ -58,7 +58,7 @@ func advanceMark(t *testing.T, f Fixture, node listing.NodeID, asOf time.Time) {
 }
 
 func markZero(t *testing.T, f Fixture) {
-	if mark := lockMark(t, f, "node-1"); !mark.IsZero() {
+	if mark := lockMark(t, f, node1); !mark.IsZero() {
 		t.Fatalf("mark = %v, want the zero time", mark)
 	}
 }
@@ -74,25 +74,25 @@ func markAdvance(t *testing.T, f Fixture) {
 		{Now.Add(time.Hour), Now.Add(time.Hour)},
 	}
 	for i, s := range steps {
-		advanceMark(t, f, "node-1", s.advance)
-		if got := lockMark(t, f, "node-1"); !got.Equal(s.want) {
+		advanceMark(t, f, node1, s.advance)
+		if got := lockMark(t, f, node1); !got.Equal(s.want) {
 			t.Fatalf("step %d: mark = %v, want %v", i, got, s.want)
 		}
 	}
 }
 
 func markPerNode(t *testing.T, f Fixture) {
-	advanceMark(t, f, "node-1", Now.Add(time.Hour))
-	if got := lockMark(t, f, "node-2"); !got.IsZero() {
+	advanceMark(t, f, node1, Now.Add(time.Hour))
+	if got := lockMark(t, f, node2); !got.IsZero() {
 		t.Fatalf("node-2 mark = %v, want the zero time", got)
 	}
 }
 
 func nodeRoundTrip(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	v := NewNodeView(t, "node-1", nodestatus.StatusProposed)
+	v := NewNodeView(t, node1, nodestatus.StatusProposed)
 	noErr(t, f.Nodes.Save(ctx, v))
-	got, err := f.Nodes.Get(ctx, "node-1")
+	got, err := f.Nodes.Get(ctx, node1)
 	noErr(t, err)
 	if !reflect.DeepEqual(got.Snapshot(), v.Snapshot()) {
 		t.Fatalf("snapshot = %+v, want %+v", got.Snapshot(), v.Snapshot())
@@ -106,16 +106,16 @@ func nodeGetMiss(t *testing.T, f Fixture) {
 
 func nodeDuplicateID(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	noErr(t, f.Nodes.Save(ctx, NewNodeView(t, "node-1", nodestatus.StatusProposed)))
-	wantErr(t, f.Nodes.Save(ctx, NewNodeView(t, "node-1", nodestatus.StatusActive)), ports.ErrConcurrentUpdate)
+	noErr(t, f.Nodes.Save(ctx, NewNodeView(t, node1, nodestatus.StatusProposed)))
+	wantErr(t, f.Nodes.Save(ctx, NewNodeView(t, node1, nodestatus.StatusActive)), ports.ErrConcurrentUpdate)
 }
 
 func nodeUpdateVersions(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	noErr(t, f.Nodes.Save(ctx, NewNodeView(t, "node-1", nodestatus.StatusProposed)))
-	a, err := f.Nodes.Get(ctx, "node-1")
+	noErr(t, f.Nodes.Save(ctx, NewNodeView(t, node1, nodestatus.StatusProposed)))
+	a, err := f.Nodes.Get(ctx, node1)
 	noErr(t, err)
-	b, err := f.Nodes.Get(ctx, "node-1")
+	b, err := f.Nodes.Get(ctx, node1)
 	noErr(t, err)
 	_, err = a.Observe(nodestatus.StatusActive, Now.Add(time.Hour))
 	noErr(t, err)
@@ -123,7 +123,7 @@ func nodeUpdateVersions(t *testing.T, f Fixture) {
 	_, err = b.Observe(nodestatus.StatusSuspended, Now.Add(time.Hour))
 	noErr(t, err)
 	wantErr(t, f.Nodes.Save(ctx, b), ports.ErrConcurrentUpdate)
-	got, err := f.Nodes.Get(ctx, "node-1")
+	got, err := f.Nodes.Get(ctx, node1)
 	noErr(t, err)
 	if got.Status() != nodestatus.StatusActive || got.Version() != 2 {
 		t.Fatalf("stored view = %s v%d", got.Status(), got.Version())

@@ -13,6 +13,31 @@ import (
 	"github.com/claudioed/offer-availability/internal/application/ports"
 )
 
+// Fixture ids and case names shared by more than one contract group: the
+// constants keep the literals from drifting (every case seeds the same few
+// entities and repeats the same storage promises per aggregate).
+const (
+	item1 = "item-1"
+	item2 = "item-2"
+	itemA = "item-a"
+	lst1  = "lst-1"
+	lst2  = "lst-2"
+	lst3  = "lst-3"
+	lst4  = "lst-4"
+	lstA  = "lst-a"
+	lstB  = "lst-b"
+	itemB = "item-b"
+	itemC = "item-c"
+	itemD = "item-d"
+	lstC  = "lst-c"
+	node1 = "node-1"
+	node2 = "node-2"
+
+	caseGetMiss     = "get of an unknown id is ErrNotFound"
+	caseDuplicateID = "creating an id that exists is ErrConcurrentUpdate"
+	caseVersionRace = "an update expects the stored version to be version-1"
+)
+
 // Fixture is one implementation of every port, over ONE empty database.
 type Fixture struct {
 	Catalog  ports.CatalogRepository

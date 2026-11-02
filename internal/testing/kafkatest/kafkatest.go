@@ -21,7 +21,7 @@ var (
 	once      sync.Once
 	container *tckafka.KafkaContainer
 	brokers   []string
-	startErr  error
+	errStart  error
 )
 
 // Brokers starts the shared broker on first use and returns its addresses.
@@ -29,14 +29,14 @@ func Brokers(t *testing.T) []string {
 	t.Helper()
 	once.Do(func() {
 		ctx := context.Background()
-		container, startErr = tckafka.Run(ctx, "confluentinc/confluent-local:7.6.1", tckafka.WithClusterID("offer-availability-itest"))
-		if startErr != nil {
+		container, errStart = tckafka.Run(ctx, "confluentinc/confluent-local:7.6.1", tckafka.WithClusterID("offer-availability-itest"))
+		if errStart != nil {
 			return
 		}
-		brokers, startErr = container.Brokers(ctx)
+		brokers, errStart = container.Brokers(ctx)
 	})
-	if startErr != nil {
-		t.Fatalf("start kafka container: %v", startErr)
+	if errStart != nil {
+		t.Fatalf("start kafka container: %v", errStart)
 	}
 	return brokers
 }
