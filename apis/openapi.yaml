@@ -55,6 +55,10 @@ paths:
       responses:
         '400':
           $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '201':
           description: Created.
           headers:
@@ -93,6 +97,10 @@ paths:
       responses:
         '400':
           $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '200':
           description: The item, now DISCONTINUED.
           headers:
@@ -140,6 +148,12 @@ paths:
             schema:
               $ref: '#/components/schemas/DeclarePackLevelRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '200':
           description: The item with its packaging.
           content:
@@ -182,6 +196,10 @@ paths:
       responses:
         '400':
           $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '200':
           description: The item with its packaging.
           headers:
@@ -230,8 +248,8 @@ paths:
                 $ref: '#/components/schemas/CatalogPage'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /catalog/{catalogItemId}:
     get:
       tags: [Catalog]
@@ -249,6 +267,8 @@ paths:
                 $ref: '#/components/schemas/CatalogItem'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /listings:
     post:
       tags: [Listings]
@@ -272,6 +292,10 @@ paths:
       responses:
         '400':
           $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '201':
           description: Created.
           headers:
@@ -321,8 +345,8 @@ paths:
                 $ref: '#/components/schemas/ListingPage'
         '400':
           $ref: '#/components/responses/BadRequest'
-        '422':
-          $ref: '#/components/responses/ValidationFailed'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /inventory-feeds:
     post:
       tags: [Inventory feeds]
@@ -354,6 +378,10 @@ paths:
       responses:
         '400':
           $ref: '#/components/responses/BadRequest'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '500':
+          $ref: '#/components/responses/InternalError'
         '201':
           description: The feed, APPLIED or SUPERSEDED.
           headers:
@@ -374,7 +402,8 @@ paths:
             The feed is FAILED, instance /inventory-feeds/{feedId}:
             listing-not-on-node (ErrListingNotOnNode) or negative-availability
             (ErrNegativeAvailability). Or validation-failed for a malformed or
-            oversized request (nothing is recorded).
+            request that breaks a value rule, such as more than 10000 lines
+            (nothing is recorded). A body over 64 KiB is 413.
           content:
             application/problem+json:
               schema:
@@ -400,6 +429,8 @@ paths:
                 $ref: '#/components/schemas/InventoryFeed'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
 components:
   parameters:
     IdempotencyKey:
@@ -458,13 +489,27 @@ components:
       description: >-
         idempotency-key-required or idempotency-key-invalid (state-changing
         routes); invalid-limit, invalid-cursor or unknown-query-parameter (list
-        reads); malformed-request-body or malformed-request-query.
+        reads); malformed-request-body (bad JSON, an unknown field, a wrong
+        type, an empty body, trailing data or a NUL character) or
+        malformed-request-query (a NUL character).
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
     NotFound:
       description: "not-found (ErrNotFound): an unknown catalogItemId or feedId."
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PayloadTooLarge:
+      description: "request-body-too-large: the request body is over 64 KiB."
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: "internal-error: an unmapped failure; the detail never leaks the internal message."
       content:
         application/problem+json:
           schema:
@@ -490,7 +535,10 @@ components:
             pack-quantity-immutable, pack-level-order, invalid-pack-quantity,
             invalid-pack-dimensions, invalid-pack-level, pack-level-not-found,
             negative-availability, stale-availability, node-not-sellable,
-            duplicate-listing, listing-not-on-node, feed-already-applied).
+            duplicate-listing, listing-not-on-node, feed-already-applied), or
+            a transport one (see the BadRequest, PayloadTooLarge and
+            InternalError responses; an unrouted method is 405
+            method-not-allowed).
           example: duplicate-listing
         title:
           type: string
@@ -762,7 +810,7 @@ components:
       enum: [RECEIVED, APPLIED, FAILED, SUPERSEDED]
     InventoryFeed:
       type: object
-      required: [feedId, nodeId, fullUpdate, asOf, state, lineCount, appliedCount, staleCount, zeroedCount]
+      required: [feedId, nodeId, fullUpdate, asOf, state, lineCount, appliedCount, staleCount, zeroedCount, receivedAt]
       properties:
         feedId:
           type: string
