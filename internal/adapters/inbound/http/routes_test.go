@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -216,7 +217,7 @@ func TestHealthAndReadiness(t *testing.T) {
 }
 
 func TestNewRouterRefusesAServerWithoutIdempotency(t *testing.T) {
-	if _, err := NewRouter(&Server{}); err != ErrNoIdempotency {
+	if _, err := NewRouter(&Server{}); !errors.Is(err, ErrNoIdempotency) {
 		t.Fatalf("err = %v", err)
 	}
 }

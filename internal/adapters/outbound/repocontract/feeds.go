@@ -13,8 +13,8 @@ import (
 
 var feedCases = []named{
 	{"save then get round-trips every state", feedRoundTrip},
-	{"get of an unknown id is ErrNotFound", feedGetMiss},
-	{"creating an id that exists is ErrConcurrentUpdate", feedDuplicateID},
+	{caseGetMiss, feedGetMiss},
+	{caseDuplicateID, feedDuplicateID},
 	{"a feed moves RECEIVED, FAILED, RECEIVED, APPLIED one version per save", feedLifecycle},
 	{"a stale update is ErrConcurrentUpdate", feedStaleUpdate},
 }
@@ -22,10 +22,10 @@ var feedCases = []named{
 func feedRoundTrip(t *testing.T, f Fixture) {
 	ctx := context.Background()
 	asOf := Now.Add(time.Hour)
-	received := NewFeed(t, "feed-received", "node-1", asOf)
-	applied := NewFeed(t, "feed-applied", "node-1", asOf)
-	failed := NewFeed(t, "feed-failed", "node-1", asOf)
-	superseded := NewFeed(t, "feed-superseded", "node-1", asOf)
+	received := NewFeed(t, "feed-received", node1, asOf)
+	applied := NewFeed(t, "feed-applied", node1, asOf)
+	failed := NewFeed(t, "feed-failed", node1, asOf)
+	superseded := NewFeed(t, "feed-superseded", node1, asOf)
 	for _, x := range []*feed.InventoryFeed{received, applied, failed, superseded} {
 		noErr(t, f.Feeds.Save(ctx, x))
 	}
@@ -52,17 +52,17 @@ func feedGetMiss(t *testing.T, f Fixture) {
 
 func feedDuplicateID(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	noErr(t, f.Feeds.Save(ctx, NewFeed(t, "feed-1", "node-1", Now)))
-	wantErr(t, f.Feeds.Save(ctx, NewFeed(t, "feed-1", "node-2", Now)), ports.ErrConcurrentUpdate)
+	noErr(t, f.Feeds.Save(ctx, NewFeed(t, "feed-1", node1, Now)))
+	wantErr(t, f.Feeds.Save(ctx, NewFeed(t, "feed-1", node2, Now)), ports.ErrConcurrentUpdate)
 }
 
 func feedLifecycle(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	x := NewFeed(t, "feed-1", "node-1", Now.Add(time.Hour))
+	x := NewFeed(t, "feed-1", node1, Now.Add(time.Hour))
 	noErr(t, f.Feeds.Save(ctx, x))
 	noErr(t, x.MarkFailed(listing.ErrNegativeAvailability))
 	noErr(t, f.Feeds.Save(ctx, x))
-	sub, err := feed.NewSubmission("feed-1", "node-1", true, Now.Add(2*time.Hour), nil)
+	sub, err := feed.NewSubmission("feed-1", node1, true, Now.Add(2*time.Hour), nil)
 	noErr(t, err)
 	noErr(t, x.Resubmit(sub, Now))
 	noErr(t, f.Feeds.Save(ctx, x))
@@ -78,7 +78,7 @@ func feedLifecycle(t *testing.T, f Fixture) {
 
 func feedStaleUpdate(t *testing.T, f Fixture) {
 	ctx := context.Background()
-	noErr(t, f.Feeds.Save(ctx, NewFeed(t, "feed-1", "node-1", Now)))
+	noErr(t, f.Feeds.Save(ctx, NewFeed(t, "feed-1", node1, Now)))
 	a, err := f.Feeds.Get(ctx, "feed-1")
 	noErr(t, err)
 	b, err := f.Feeds.Get(ctx, "feed-1")

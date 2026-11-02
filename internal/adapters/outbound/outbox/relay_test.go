@@ -15,7 +15,7 @@ import (
 var errSend = errors.New("broker down")
 
 // fakeStore drains an in-memory queue the way OutboxRepo does: in order, one at a
-// time, stopping at the first send error with an *outbox.SendFailure.
+// time, stopping at the first send error with an *outbox.SendFailureError.
 type fakeStore struct {
 	mu       sync.Mutex
 	rows     []outbox.Message
@@ -44,7 +44,7 @@ func (s *fakeStore) Drain(ctx context.Context, limit, maxAttempts int, send func
 		}
 		if err := send(ctx, m); err != nil {
 			s.attempts[i]++
-			failure = &outbox.SendFailure{RowID: int64(i + 1), Message: m, Attempts: s.attempts[i], Err: err}
+			failure = &outbox.SendFailureError{RowID: int64(i + 1), Message: m, Attempts: s.attempts[i], Err: err}
 			rest = append(rest, m)
 			continue
 		}
@@ -126,7 +126,7 @@ func TestFailedSendStopsThePassAndLogsTheCappedRowOnce(t *testing.T) {
 	relay := NewOutboxRelay(store, sink, logger, WithMaxAttempts(2))
 	for i := 1; i <= 2; i++ {
 		n, err := relay.RelayOnce(context.Background())
-		var sf *outbox.SendFailure
+		var sf *outbox.SendFailureError
 		if n != 0 || !errors.As(err, &sf) || sf.Attempts != i || !errors.Is(err, errSend) {
 			t.Fatalf("pass %d: n %d err %v", i, n, err)
 		}

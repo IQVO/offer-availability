@@ -21,10 +21,10 @@ var errBoom = errors.New("boom")
 // twoItems saves two catalogue items through the repository on ctx.
 func twoItems(t *testing.T, f Fixture, ctx context.Context) error {
 	t.Helper()
-	if err := f.Catalog.Save(ctx, NewItem(t, "item-1")); err != nil {
+	if err := f.Catalog.Save(ctx, NewItem(t, item1)); err != nil {
 		return err
 	}
-	return f.Catalog.Save(ctx, NewItem(t, "item-2"))
+	return f.Catalog.Save(ctx, NewItem(t, item2))
 }
 
 func itemStored(f Fixture, id catalog.ID) bool {
@@ -34,7 +34,7 @@ func itemStored(f Fixture, id catalog.ID) bool {
 
 func uowCommit(t *testing.T, f Fixture) {
 	noErr(t, f.UoW.Do(context.Background(), func(ctx context.Context) error { return twoItems(t, f, ctx) }))
-	if !itemStored(f, "item-1") || !itemStored(f, "item-2") {
+	if !itemStored(f, item1) || !itemStored(f, item2) {
 		t.Fatal("a committed unit lost a save")
 	}
 }
@@ -45,7 +45,7 @@ func uowRollback(t *testing.T, f Fixture) {
 		return errBoom
 	})
 	wantErr(t, err, errBoom)
-	if itemStored(f, "item-1") || itemStored(f, "item-2") {
+	if itemStored(f, item1) || itemStored(f, item2) {
 		t.Fatal("a failed unit left a save behind")
 	}
 }
@@ -55,12 +55,12 @@ func uowPanic(t *testing.T, f Fixture) {
 		if recover() == nil {
 			t.Fatal("the panic was swallowed")
 		}
-		if itemStored(f, "item-1") {
+		if itemStored(f, item1) {
 			t.Fatal("a panicking unit left a save behind")
 		}
 	}()
 	_ = f.UoW.Do(context.Background(), func(ctx context.Context) error {
-		noErr(t, f.Catalog.Save(ctx, NewItem(t, "item-1")))
+		noErr(t, f.Catalog.Save(ctx, NewItem(t, item1)))
 		panic("kaboom")
 	})
 }
@@ -68,12 +68,12 @@ func uowPanic(t *testing.T, f Fixture) {
 func uowNested(t *testing.T, f Fixture) {
 	err := f.UoW.Do(context.Background(), func(ctx context.Context) error {
 		noErr(t, f.UoW.Do(ctx, func(ctx context.Context) error {
-			return f.Catalog.Save(ctx, NewItem(t, "item-1"))
+			return f.Catalog.Save(ctx, NewItem(t, item1))
 		}))
 		return errBoom
 	})
 	wantErr(t, err, errBoom)
-	if itemStored(f, "item-1") {
+	if itemStored(f, item1) {
 		t.Fatal("the inner unit committed on its own")
 	}
 }
@@ -83,7 +83,7 @@ func uowOutbox(t *testing.T, f Fixture) {
 		t.Skip("the fixture cannot count its outbox")
 	}
 	ctx := context.Background()
-	item := NewItem(t, "item-1")
+	item := NewItem(t, item1)
 	events := SomeEvents(t)
 	failed := f.UoW.Do(ctx, func(ctx context.Context) error {
 		noErr(t, f.Catalog.Save(ctx, item))

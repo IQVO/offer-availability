@@ -156,7 +156,7 @@ func nodeEventFrom(e ce.Event) (usecases.NodeEvent, bool, error) {
 	}
 	var d nodeData
 	if err := e.DataAs(&d); err != nil {
-		return usecases.NodeEvent{}, true, fmt.Errorf("%w: %v", errBadPayload, err)
+		return usecases.NodeEvent{}, true, fmt.Errorf("%w: %w", errBadPayload, err)
 	}
 	at := e.Time()
 	switch e.Type() {
