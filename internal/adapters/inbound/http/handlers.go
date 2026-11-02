@@ -160,18 +160,18 @@ func (s *Server) applyInventoryFeed(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, shared.Invalid("feedId, nodeId, fullUpdate, asOf and lines are required"))
 		return
 	}
-	v, err := s.ApplyInventoryFeed.Execute(r.Context(), body.command())
+	res, err := s.ApplyInventoryFeed.Execute(r.Context(), body.command())
 	if err != nil {
-		if v.State == string(feed.StateFailed) {
-			keepWrites(r.Context())
-			p := problemFor(err)
-			writeProblemAt(w, p, err.Error(), fmt.Sprintf("/inventory-feeds/%s", v.FeedID))
-			return
-		}
 		writeError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, v)
+	if res.Failed() {
+		keepWrites(r.Context())
+		p := problemFor(res.Failure)
+		writeProblemAt(w, p, res.Failure.Error(), fmt.Sprintf("/inventory-feeds/%s", res.Feed.FeedID))
+		return
+	}
+	writeJSON(w, http.StatusCreated, res.Feed)
 }
 
 // getInventoryFeed is GET /inventory-feeds/{feedId}.

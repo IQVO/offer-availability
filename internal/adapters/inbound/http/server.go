@@ -46,7 +46,7 @@ type (
 		Execute(context.Context, catalog.ID, string) (views.CatalogItem, error)
 	}
 	applyInventoryFeed interface {
-		Execute(context.Context, usecases.ApplyInventoryFeedCommand) (views.InventoryFeed, error)
+		Execute(context.Context, usecases.ApplyInventoryFeedCommand) (usecases.FeedResult, error)
 	}
 	getInventoryFeed interface {
 		Execute(context.Context, feed.ID) (views.InventoryFeed, error)
