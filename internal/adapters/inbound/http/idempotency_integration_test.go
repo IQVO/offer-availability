@@ -110,15 +110,14 @@ func TestSameKeySameBodyReplaysTheFirstAnswerAndDoesTheWorkOnce(t *testing.T) {
 	}
 }
 
-func TestSameKeyOtherBodyOrOtherPathIsReused422(t *testing.T) {
+func TestSameKeyOtherBodyOrOtherPathIsReused409(t *testing.T) {
 	r := newPGRig(t)
 	r.do(http.MethodPost, "/catalog-items", "key-2", itemBody)
 	r.do(http.MethodPost, "/catalog-items", "key-2", strings.Replace(itemBody, "Bottle", "Mug", 1)).
-		problem(t, http.StatusUnprocessableEntity, "idempotency-key-reused")
-	// The route is part of the scope: the same key on another route is another request.
-	if res := r.do(http.MethodPost, "/listings", "key-2", `{"catalogItemId":"x","nodeId":"n"}`); res.code != http.StatusNotFound {
-		t.Fatalf("another route, same key: %d %s", res.code, res.body)
-	}
+		problem(t, http.StatusConflict, "idempotency-key-reused")
+	// The key is global: the same key on another route is a reuse, not a new key.
+	r.do(http.MethodPost, "/listings", "key-2", `{"catalogItemId":"x","nodeId":"n"}`).
+		problem(t, http.StatusConflict, "idempotency-key-reused")
 }
 
 func TestA4xxIsStoredAndItsWritesAreDropped(t *testing.T) {
@@ -245,10 +244,10 @@ func TestExpiredKeysArePurgedByTheNextKeyedWrite(t *testing.T) {
 	}
 }
 
-func TestDiscontinueRouteWithColonVerbOverPostgres(t *testing.T) {
+func TestDiscontinuationsRouteOverPostgres(t *testing.T) {
 	r := newPGRig(t)
 	item := r.do(http.MethodPost, "/catalog-items", "a", itemBody).json()["catalogItemId"].(string)
-	res := r.do(http.MethodPost, "/catalog-items/"+item+":discontinue", "b", "")
+	res := r.do(http.MethodPost, "/catalog-items/"+item+"/discontinuations", "b", "")
 	if res.code != http.StatusOK || res.json()["state"] != "DISCONTINUED" {
 		t.Fatalf("%d %s", res.code, res.body)
 	}

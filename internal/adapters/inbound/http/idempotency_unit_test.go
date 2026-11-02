@@ -85,7 +85,7 @@ func (t *fakeTx) Rollback(context.Context) error {
 func (t *fakeTx) Exec(_ context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
 	// id extracts (route, key): the INSERT passes route,key,hash; the UPDATE
 	// passes status,body,route,key.
-	id := func(route, key any) string { return fmt.Sprintf("%v\x00%v", route, key) }
+	id := func(key any) string { return fmt.Sprintf("%v", key) }
 	switch {
 	case strings.HasPrefix(sql, "DELETE FROM idempotency_keys"):
 		t.log.op("purge")
@@ -96,12 +96,12 @@ func (t *fakeTx) Exec(_ context.Context, sql string, args ...any) (pgconn.Comman
 		}
 		t.log.mu.Lock()
 		defer t.log.mu.Unlock()
-		if t.log.claimed[id(args[0], args[1])] {
+		if t.log.claimed[id(args[1])] {
 			t.log.ops = append(t.log.ops, "conflict")
 			return pgconn.NewCommandTag("INSERT 0 0"), nil // ON CONFLICT DO NOTHING
 		}
-		t.log.claimed[id(args[0], args[1])] = true
-		t.log.ops = append(t.log.ops, "insert "+id(args[0], args[1]))
+		t.log.claimed[id(args[1])] = true
+		t.log.ops = append(t.log.ops, "insert "+id(args[1]))
 		return pgconn.NewCommandTag("INSERT 0 1"), nil
 	case strings.HasPrefix(sql, "UPDATE idempotency_keys"):
 		if t.log.failExec != nil {
@@ -109,8 +109,8 @@ func (t *fakeTx) Exec(_ context.Context, sql string, args ...any) (pgconn.Comman
 		}
 		t.log.mu.Lock()
 		defer t.log.mu.Unlock()
-		t.log.outcomes[id(args[2], args[3])] = storedOutcome{status: args[0].(int), body: args[1].([]byte)}
-		t.log.ops = append(t.log.ops, fmt.Sprintf("store %s %d", id(args[2], args[3]), args[0].(int)))
+		t.log.outcomes[id(args[2])] = storedOutcome{status: args[0].(int), body: args[1].([]byte)}
+		t.log.ops = append(t.log.ops, fmt.Sprintf("store %s %d", id(args[2]), args[0].(int)))
 		return pgconn.NewCommandTag("UPDATE 1"), nil
 	}
 	return pgconn.NewCommandTag("SELECT 1"), nil
@@ -184,10 +184,10 @@ func TestKeyFromAcceptsAUsableKey(t *testing.T) {
 	}
 }
 
-func TestHasControl(t *testing.T) {
-	for s, want := range map[string]bool{"plain": false, "space key": false, "tab\t": true, "nl\n": true, "del\u007f": true} {
-		if got := hasControl(s); got != want {
-			t.Errorf("hasControl(%q) = %v, want %v", s, got, want)
+func TestNotPrintableASCII(t *testing.T) {
+	for s, want := range map[string]bool{"plain": false, "space key": false, "tab\t": true, "nl\n": true, "del\u007f": true, "caf\u00e9": true} {
+		if got := notPrintableASCII(s); got != want {
+			t.Errorf("notPrintableASCII(%q) = %v, want %v", s, got, want)
 		}
 	}
 }
@@ -324,7 +324,7 @@ func TestSettleCommitsASuccessAndStoresItsOutcome(t *testing.T) {
 			t.Fatalf("ops = %v, want %q recorded", ops, want)
 		}
 	}
-	if out := log.outcomes["POST /listings\x00k1"]; out.status != http.StatusCreated {
+	if out := log.outcomes["k1"]; out.status != http.StatusCreated {
 		t.Fatalf("stored outcome = %+v, want the 201", out)
 	}
 }
@@ -385,7 +385,7 @@ func TestRunFreshAnswersStoresAndFlushes(t *testing.T) {
 		t.Fatalf("response = %d %s, want the captured 201 flushed", out.Code, out.Body)
 	}
 	ops := strings.Join(log.snapshot(), ",")
-	for _, want := range []string{"begin", "sp-commit", "store POST /listings\x00k1 201", "commit"} {
+	for _, want := range []string{"begin", "sp-commit", "store k1 201", "commit"} {
 		if !strings.Contains(ops, want) {
 			t.Fatalf("ops = %v, want %q", ops, want)
 		}
@@ -406,7 +406,7 @@ func TestRunFreshKeepsA4xxTheHandlerAskedToKeep(t *testing.T) {
 		t.Fatalf("response = %d, want 422", out.Code)
 	}
 	ops := strings.Join(log.snapshot(), ",")
-	if !strings.Contains(ops, "sp-commit") || !strings.Contains(ops, "store POST /inventory-feeds\x00k1 422") {
+	if !strings.Contains(ops, "sp-commit") || !strings.Contains(ops, "store k1 422") {
 		t.Fatalf("ops = %v, want the writes kept and the 422 stored", ops)
 	}
 }

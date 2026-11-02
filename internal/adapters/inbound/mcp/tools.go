@@ -190,8 +190,8 @@ func toListing(l views.Listing) listingView {
 }
 
 func toListingPage(page views.ListingPage) listingPageView {
-	listings := make([]listingView, 0, len(page.Listings))
-	for _, l := range page.Listings {
+	listings := make([]listingView, 0, len(page.Items))
+	for _, l := range page.Items {
 		listings = append(listings, toListing(l))
 	}
 	return listingPageView{Listings: listings, NextCursor: page.NextCursor}

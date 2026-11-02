@@ -51,7 +51,7 @@ describe("CatalogScreen", () => {
   it("walks forward with the nextCursor and back without asking the API to", async () => {
     const api = mockApi({
       "GET /catalog": (call) =>
-        call.query.get("after") === "item-2"
+        call.query.get("cursor") === "item-2"
           ? json({ items: [catalogItem({ catalogItemId: "item-page2" })] })
           : json({ items: [catalogItem({ catalogItemId: "item-page1" })], nextCursor: "item-2" }),
     });
@@ -61,7 +61,7 @@ describe("CatalogScreen", () => {
     expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Next page" }));
     await screen.findByRole("link", { name: "item-page2" });
-    expect(api.calls[1].query.get("after")).toBe("item-2");
+    expect(api.calls[1].query.get("cursor")).toBe("item-2");
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Previous page" }));
     await screen.findByRole("link", { name: "item-page1" });

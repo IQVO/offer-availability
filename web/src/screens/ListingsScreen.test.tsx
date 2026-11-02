@@ -24,7 +24,7 @@ describe("ListingsScreen", () => {
   it("lists listings with state, suppression reason, availability and feed link", async () => {
     mockApi({
       "GET /listings": json({
-        listings: [
+        items: [
           listing(),
           listing({ listingId: "lst-2", catalogItemId: "item-2", nodeId: "node-b", state: "SUPPRESSED", suppressionReason: "DISCONTINUED", availability: { availableQty: 0, basis: "UNKNOWN" } }),
         ],
@@ -43,7 +43,7 @@ describe("ListingsScreen", () => {
   });
 
   it("says so when nothing matches", async () => {
-    mockApi({ "GET /listings": json({ listings: [] }) });
+    mockApi({ "GET /listings": json({ items: [] }) });
     renderScreen();
     expect(await screen.findByText("No listing matches these filters.")).toBeInTheDocument();
   });
@@ -57,7 +57,7 @@ describe("ListingsScreen", () => {
   });
 
   it("applies the node and item filters as query parameters and restarts at page 1", async () => {
-    const api = mockApi({ "GET /listings": json({ listings: [listing()], nextCursor: "lst-2" }) });
+    const api = mockApi({ "GET /listings": json({ items: [listing()], nextCursor: "lst-2" }) });
     renderScreen();
     await screen.findByText("lst-1");
     const user = userEvent.setup();
@@ -71,7 +71,7 @@ describe("ListingsScreen", () => {
   });
 
   it("refuses a malformed node filter before asking", async () => {
-    const api = mockApi({ "GET /listings": json({ listings: [] }) });
+    const api = mockApi({ "GET /listings": json({ items: [] }) });
     renderScreen();
     await screen.findByText("No listing matches these filters.");
     const user = userEvent.setup();
@@ -82,7 +82,7 @@ describe("ListingsScreen", () => {
   });
 
   it("seeds the node filter from the URL and asks with it at once", async () => {
-    const api = mockApi({ "GET /listings": json({ listings: [listing()] }) });
+    const api = mockApi({ "GET /listings": json({ items: [listing()] }) });
     renderScreen("/listings?nodeId=node-a");
     await screen.findByText("lst-1");
     expect(Object.fromEntries(api.calls[0].query)).toEqual({ limit: "25" });

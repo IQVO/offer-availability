@@ -235,12 +235,12 @@ func restFlow(t *testing.T, s *service) world {
 	if str(g, "state") != "APPLIED" {
 		t.Fatalf("GET feed = %v", g)
 	}
-	av := decode(t, s.get("/listings?nodeId=node-a&catalogItemId="+w.bottle))["listings"].([]any)[0].(map[string]any)["availability"].(map[string]any)
+	av := decode(t, s.get("/listings?nodeId=node-a&catalogItemId="+w.bottle))["items"].([]any)[0].(map[string]any)["availability"].(map[string]any)
 	if av["availableQty"] != float64(120) || av["basis"] != "THROUGHPUT_CONSTRAINED" || av["asOf"] != "2026-10-23T10:00:00Z" {
 		t.Fatalf("availability = %v", av)
 	}
 	// A full feed leaves an omitted listing that is already at 0 untouched (ADR 0002, A10).
-	mug := decode(t, s.get("/listings?catalogItemId="+w.mug))["listings"].([]any)[0].(map[string]any)["availability"].(map[string]any)
+	mug := decode(t, s.get("/listings?catalogItemId="+w.mug))["items"].([]any)[0].(map[string]any)["availability"].(map[string]any)
 	if mug["availableQty"] != float64(0) || mug["basis"] != "UNKNOWN" || mug["asOf"] != nil {
 		t.Fatalf("the omitted listing at 0 changed: %v", mug)
 	}
@@ -277,7 +277,7 @@ func assertReplay(t *testing.T, s *service) {
 		t.Fatalf("one key created %d items", n-before)
 	}
 	other := s.call(http.MethodPost, "/catalog-items", strings.Replace(body, "Replay", "Other", 1), "replay-key")
-	if other.status != http.StatusUnprocessableEntity || str(decode(t, other), "type") != "idempotency-key-reused" {
+	if other.status != http.StatusConflict || str(decode(t, other), "type") != "idempotency-key-reused" {
 		t.Fatalf("same key, other body: %d %s", other.status, other.body)
 	}
 }
@@ -285,7 +285,7 @@ func assertReplay(t *testing.T, s *service) {
 func nodeFlow(t *testing.T, s *service, w world) {
 	t.Helper()
 	state := func(id string) string {
-		for _, l := range decode(t, s.get("/listings?nodeId=node-a"))["listings"].([]any) {
+		for _, l := range decode(t, s.get("/listings?nodeId=node-a"))["items"].([]any) {
 			if m := l.(map[string]any); str(m, "listingId") == id {
 				return str(m, "state") + "/" + str(m, "suppressionReason")
 			}
@@ -300,12 +300,12 @@ func nodeFlow(t *testing.T, s *service, w world) {
 	waitState(w.lstBottleA, "SUPPRESSED/NODE_NOT_SELLABLE")
 	waitState(w.lstMugA, "SUPPRESSED/NODE_NOT_SELLABLE")
 	// Suppressing keeps the availability the node declared.
-	if av := decode(t, s.get("/listings?nodeId=node-a&catalogItemId="+w.bottle))["listings"].([]any)[0].(map[string]any)["availability"].(map[string]any); av["availableQty"] != float64(120) {
+	if av := decode(t, s.get("/listings?nodeId=node-a&catalogItemId="+w.bottle))["items"].([]any)[0].(map[string]any)["availability"].(map[string]any); av["availableQty"] != float64(120) {
 		t.Fatalf("suppressed listing lost its availability: %v", av)
 	}
 
 	// A discontinued item stays suppressed for good, whatever the node does.
-	d := s.write(http.MethodPost, "/catalog-items/"+w.bottle+":discontinue", "", http.StatusOK)
+	d := s.write(http.MethodPost, "/catalog-items/"+w.bottle+"/discontinuations", "", http.StatusOK)
 	if str(d, "state") != "DISCONTINUED" {
 		t.Fatalf("discontinue = %v", d)
 	}
