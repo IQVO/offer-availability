@@ -120,7 +120,7 @@ same key with the same method, path and body replays the first answer with `Idem
 | `ListListings` | optional `nodeId`, `catalogItemId` (combine with AND), `limit`, `cursor` | Listings by id ascending with `nextCursor` |
 | `GetInventoryFeed` | feed id | The feed and its outcome (state, counters, `failureCode`), or `not-found` |
 
-A `limit` outside 1 to 500 is `validation-failed` (422). The cursor is the last returned id.
+A `limit` that is not an integer from 1 to 500 is 400 `invalid-limit`, a bad `cursor` is 400 `invalid-cursor` and an undeclared query parameter is 400 `unknown-query-parameter`. The cursor is the last returned id.
 
 ## Errors and the problem types they become
 
