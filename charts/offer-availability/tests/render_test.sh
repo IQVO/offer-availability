@@ -47,9 +47,9 @@ binary_env() {
 # Word splitting is safe: the names are [A-Z0-9_] only (bash 3.2 has no mapfile).
 # shellcheck disable=SC2207
 vars=($(binary_env))
-(( ${#vars[@]} == 10 )) || fail "found ${#vars[@]} env constants (${vars[*]}), want the 10 of docs/docs/operations/before-first-release.md row 8; the scan is looking in the wrong place or the binary changed"
+(( ${#vars[@]} == 11 )) || fail "found ${#vars[@]} env constants (${vars[*]}), want the 11 of docs/docs/operations/before-first-release.md row 8; the scan is looking in the wrong place or the binary changed"
 for var in DATABASE_URL MIGRATIONS_DATABASE_URL KAFKA_BROKERS NODE_TOPOLOGY_CONSUMER_GROUP HTTP_ADDR \
-  OUTBOX_RELAY_INTERVAL OUTBOX_MAX_ATTEMPTS RETENTION_INTERVAL SHUTDOWN_DRAIN_DELAY LOG_LEVEL; do
+  OUTBOX_RELAY_INTERVAL OUTBOX_MAX_ATTEMPTS FEED_APPLY_CHUNK_SIZE RETENTION_INTERVAL SHUTDOWN_DRAIN_DELAY LOG_LEVEL; do
   [[ " ${vars[*]} " == *" $var "* ]] || fail "the binary no longer reads $var (update the chart and this test)"
 done
 for var in "${vars[@]}"; do
