@@ -85,7 +85,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				ID:          skillCheckAvailability,
 				Name:        "Check where an item is sold and how much is available",
 				Description: "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
-				Tags:        []string{serviceName, "availability", "read"},
+				Tags:        []string{serviceName, "availability", "read", "authority:L1"},
 				InputModes:  []string{contentJSON},
 				Examples: []string{
 					`{"skill":"check_availability","arguments":{"catalogItemId":"item-1"}}`,
@@ -96,7 +96,7 @@ func Card(cfg Config) *a2a.AgentCard {
 				ID:          skillFeedOutcome,
 				Name:        "Read the outcome of one vendor inventory feed",
 				Description: "Read one vendor inventory feed by feedId: the node it was sent for (nodeId), whether it was a fullUpdate, its asOf, its state APPLIED, SUPERSEDED or FAILED with the counters (lineCount, appliedCount, staleCount, zeroedCount), receivedAt, appliedAt and, when it FAILED, the failureCode (listing-not-on-node or negative-availability). An unknown feedId is a not-found problem. Reading a feed changes nothing; applying one stays a REST operation.",
-				Tags:        []string{serviceName, "inventory-feed", "read"},
+				Tags:        []string{serviceName, "inventory-feed", "read", "authority:L1"},
 				InputModes:  []string{contentJSON},
 				Examples: []string{
 					`{"skill":"feed_outcome","arguments":{"feedId":"feed-7"}}`,
