@@ -29,6 +29,34 @@ The table below comes from a live `tools/list` against `cmd/mcp` built from this
 All input schemas set `additionalProperties: false`: an unknown argument is refused. Optional inputs carry `omitempty`
 (`TestMCPOptionalToolInputsCarryOmitempty`), so omitting them is valid.
 
+## Authority levels
+
+Every tool (and every A2A skill, [ADR 0012](/docs/adr/0012-agent-authority-levels-and-complete-mcp-surface)) declares one
+fleet authority level in `tools/list` `_meta` under `com.warehouse/authority`. This surface is read-only, so every level
+here is `L1` — reads facts, changes nothing:
+
+| Tool | Authority |
+| --- | --- |
+| `browse_catalog` | `L1` |
+| `get_catalog_item` | `L1` |
+| `list_listings` | `L1` |
+| `get_inventory_feed` | `L1` |
+
+The level is a label for callers and reviewers, not access control. It is pinned by `TestToolRegistryGolden`
+(`testdata/tool_registry.golden.json`) and by the static sensor
+`internal/architecture/mcp_authority_fitness_test.go`.
+
+## Resource and prompt
+
+Beyond tools, the server offers one scoped resource and one prompt ([ADR 0012](/docs/adr/0012-agent-authority-levels-and-complete-mcp-surface)):
+
+- **Resource** `warehouse://offer-availability/catalog/{catalogItemId}` (`application/json`): one catalogue item —
+  dimensions, weight, hazmat and fragile flags, state, `identifiers.gtin`, packaging hierarchy — the same bounded read
+  model as `get_catalog_item`, loadable without a tool call.
+- **Prompt** `investigate_availability` (arguments `catalogItemId`, `nodeId`, both optional): the operator SOP for
+  investigating where an item is sold, why a listing is suppressed and what a vendor's feed last changed. It names the
+  read tools but never calls them.
+
 ## Errors
 
 A failing call returns a normal tool result with `isError: true` and the error text, never a protocol error. Use cases
@@ -43,9 +71,12 @@ curl -si -X POST localhost:8090/mcp -H 'Content-Type: application/json' -H 'Acce
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"docs","version":"0"}}}'
 ```
 
-Take `Mcp-Session-Id` from the response, send `notifications/initialized` with it, then `tools/list` and `tools/call` with
-`{"name":"get_inventory_feed","arguments":{"feedId":"feed-1"}}`. A `tools/list` sent before the session is initialised is
-refused. The full exchange with real responses is in the [Quickstart](/docs/overview/quickstart#7-first-calls-on-mcp).
+The handler is **stateless** ([ADR 0012](/docs/adr/0012-agent-authority-levels-and-complete-mcp-surface)): no
+`Mcp-Session-Id` is issued at all, so skip the session bookkeeping above — send `tools/list` and `tools/call`
+(`{"name":"get_inventory_feed","arguments":{"feedId":"feed-1"}}`) as further self-describing POSTs. The server also
+answers the 2026-07-28 per-request handshake (`server/discover`, headers `MCP-Protocol-Version` and `Mcp-Method`),
+while a legacy `initialize` such as the one above still answers 200 for SDK clients that open with it. The full
+exchange with real responses is in the [Quickstart](/docs/overview/quickstart#7-first-calls-on-mcp).
 
 ## Deployment
 

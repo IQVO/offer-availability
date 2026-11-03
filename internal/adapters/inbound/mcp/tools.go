@@ -255,10 +255,12 @@ func (d Deps) getInventoryFeed(ctx context.Context, in feedIDInput) (inventoryFe
 
 // registerTools adds the four read-only tools. Every tool is annotated
 // read-only, idempotent and closed-world; TestToolSurface pins the set and
-// fails the build on any write-verb name (docs/adr/0006).
+// fails the build on any write-verb name (docs/adr/0006). Every tool also
+// declares its authority level L1 in Meta (Agentic Standard v2, AS-1: a pure
+// read of this context's own state; docs/adr/0012) — the annotations literal
+// is inlined per tool so the static fitness sensor can prove ReadOnlyHint.
 func (d Deps) registerTools(server *mcp.Server) {
 	closedWorld := false
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld}
 
 	addTool(server, &mcp.Tool{
 		Name: "browse_catalog",
@@ -266,7 +268,8 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"item's title, dimensions in mm (lengthMm, widthMm, heightMm), weightG, its hazmat and fragile flags and its " +
 			"state (ACTIVE, or DISCONTINUED once it was discontinued). Pass the returned nextCursor as after to get the " +
 			"next page; it is absent on the last page. Read-only; a bad limit fails with validation-failed.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		Meta:        authorityMeta(authorityL1),
 	}, d.browseCatalog)
 
 	addTool(server, &mcp.Tool{
@@ -276,7 +279,8 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"(identifiers.gtin) when it has any, and its packaging hierarchy (packaging: one entry per declared pack " +
 			"level with level, gtin, childGtin, unitsPerPack in eaches, optional dimsMm and grossWeightG, and whether " +
 			"the level is active). Read-only; an unknown id fails with not-found.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		Meta:        authorityMeta(authorityL1),
 	}, d.getCatalogItem)
 
 	addTool(server, &mcp.Tool{
@@ -287,7 +291,8 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"a seller, and the availability a vendor's feed last gave it (availableQty, the vendor's basis, asOf and " +
 			"the feedId). Pass the returned nextCursor as after to get the next page. Read-only; a bad limit fails " +
 			"with validation-failed.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		Meta:        authorityMeta(authorityL1),
 	}, d.listListings)
 
 	addTool(server, &mcp.Tool{
@@ -296,7 +301,8 @@ func (d Deps) registerTools(server *mcp.Server) {
 			"it was a fullUpdate, its asOf, and its state APPLIED, SUPERSEDED or FAILED with the counters (lineCount, " +
 			"appliedCount, staleCount, zeroedCount), appliedAt, and the failureCode (listing-not-on-node or " +
 			"negative-availability) when it FAILED. Read-only; an unknown id fails with not-found.",
-		Annotations: readOnly,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, IdempotentHint: true, OpenWorldHint: &closedWorld},
+		Meta:        authorityMeta(authorityL1),
 	}, d.getInventoryFeed)
 }
 
