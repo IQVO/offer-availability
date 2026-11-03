@@ -71,14 +71,12 @@ curl -si -X POST localhost:8090/mcp -H 'Content-Type: application/json' -H 'Acce
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"docs","version":"0"}}}'
 ```
 
-Take `Mcp-Session-Id` from the response, send `notifications/initialized` with it, then `tools/list` and `tools/call` with
-`{"name":"get_inventory_feed","arguments":{"feedId":"feed-1"}}`. A `tools/list` sent before the session is initialised is
-refused. The full exchange with real responses is in the [Quickstart](/docs/overview/quickstart#7-first-calls-on-mcp).
-
 The handler is **stateless** ([ADR 0012](/docs/adr/0012-agent-authority-levels-and-complete-mcp-surface)): no
-`Mcp-Session-Id` is issued at all, calls are self-describing per request, and the server also answers the 2026-07-28
-per-request handshake (`server/discover`, headers `MCP-Protocol-Version` and `Mcp-Method`), while a legacy `initialize`
-such as the one above still answers 200.
+`Mcp-Session-Id` is issued at all, so skip the session bookkeeping above — send `tools/list` and `tools/call`
+(`{"name":"get_inventory_feed","arguments":{"feedId":"feed-1"}}`) as further self-describing POSTs. The server also
+answers the 2026-07-28 per-request handshake (`server/discover`, headers `MCP-Protocol-Version` and `Mcp-Method`),
+while a legacy `initialize` such as the one above still answers 200 for SDK clients that open with it. The full
+exchange with real responses is in the [Quickstart](/docs/overview/quickstart#7-first-calls-on-mcp).
 
 ## Deployment
 
