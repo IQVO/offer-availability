@@ -43,3 +43,4 @@ GitFlow: feature/* -> PR into develop, CI green before merge, never push develop
 Deployment: `charts/offer-availability` (one `api` component; refuses to render without a database source, `kafka.brokers`, `config.nodeTopologyConsumerGroup`; tests in `charts/offer-availability/tests`, see docs/docs/overview/runtime.md). Open follow-up: repository secrets (docs/docs/operations/before-first-release.md row 11).
 
 A2A: `cmd/a2a` (port 8093) is this context's read-only Agent2Agent agent, skills `check_availability` (read), `feed_outcome` (read), decided in `docs/adr/0010-a2a-inbound-adapter.md`; delegation only (facts stay CloudEvents on Kafka), unauthenticated like REST and MCP; rules in `.claude/rules/fleet/a2a.md`.
+ Agent authority: every MCP tool and A2A skill declares a level (`com.warehouse/authority` _meta / `authority:L<n>` skill tag; L1 read, L2 recommend, L3 write - ADR 12); the MCP Streamable HTTP handler is stateless and answers the 2026-07-28 revision.

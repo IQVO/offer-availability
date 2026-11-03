@@ -209,6 +209,7 @@ Streamable HTTP at `/mcp` (and `/`), an open `/healthz` on `MCP_ADDR` (default `
 | `get_inventory_feed(feedId)` | `GET /inventory-feeds/{feedId}` |
 
 Errors carry the REST problem slugs (`not-found`, `validation-failed`); the whole advertised tool registry is pinned by a golden file.
+Every tool and every A2A skill declares the fleet authority level `L1` (`tools/list` `_meta` `com.warehouse/authority` / the card tag `authority:L1`), the handler is stateless (it answers the 2026-07-28 `server/discover` handshake, issues no session id), and the surface completes with one resource (`warehouse://offer-availability/catalog/{catalogItemId}`) and one prompt (`investigate_availability`) — [ADR 0012](docs/adr/0012-agent-authority-levels-and-complete-mcp-surface.md).
 
 ```sh
 export DATABASE_URL=postgres://user:***@localhost:5432/offer_availability?sslmode=disable
