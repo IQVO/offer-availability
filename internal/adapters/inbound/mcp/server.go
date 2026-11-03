@@ -47,10 +47,16 @@ func NewServer(deps Deps) *mcp.Server {
 		&mcp.ServerOptions{Instructions: instructions},
 	)
 	deps.registerTools(server)
+	deps.registerResources(server)
+	deps.registerPrompts(server)
 	return server
 }
 
 // Handler returns the Streamable HTTP handler for the MCP server.
+// Stateless (Agentic Standard v2, AS-4): no Mcp-Session-Id is issued, so the
+// handler answers the 2026-07-28 per-request handshake (server/discover)
+// while a legacy initialize (e.g. 2025-06-18) still answers 200; nothing in
+// this adapter keeps cross-call state. Pinned by stateless_test.go.
 func Handler(server *mcp.Server) http.Handler {
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, nil)
+	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true})
 }
