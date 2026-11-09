@@ -26,3 +26,4 @@ The *Status* column is copied from each ADR's own `## Status` section.
 | [0010](./0010-a2a-inbound-adapter.md) | A2A inbound adapter: a read-only agent with two skills | Accepted (2026-10-29) |
 | [0011](./0011-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01) |
 | [0012](./0012-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and complete MCP surface | Accepted (2026-11-02) |
+| [0013](./0013-seller-status-and-received-stock-drive-owner-listings.md) | Seller status and received stock drive owner listings | Accepted (2026-11-08) |

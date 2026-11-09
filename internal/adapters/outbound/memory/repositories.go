@@ -12,6 +12,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
+	"github.com/claudioed/offer-availability/internal/domain/sellerstatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
 
@@ -180,6 +181,12 @@ func (r *ListingRepository) ListByItem(ctx context.Context, item listing.ItemID)
 	return r.collect(func(s listing.Snapshot) bool { return s.ItemID == item })
 }
 
+// ListByOwner returns every listing of the owner by id ascending.
+func (r *ListingRepository) ListByOwner(ctx context.Context, owner listing.OwnerRef) ([]*listing.Listing, error) {
+	defer r.s.enter(ctx)()
+	return r.collect(func(s listing.Snapshot) bool { return s.OwnerRef == owner })
+}
+
 // List returns the matching listings of the page by id ascending.
 func (r *ListingRepository) List(ctx context.Context, f repository.ListingFilter, page repository.Page) ([]*listing.Listing, error) {
 	defer r.s.enter(ctx)()
@@ -316,6 +323,31 @@ func (r *NodeStatusRepository) Save(ctx context.Context, v *nodestatus.View) err
 		return err
 	}
 	r.s.nodes[snap.ID] = snap
+	return nil
+}
+
+// SellerStatusRepository is the in-memory ports.SellerStatusRepository.
+type SellerStatusRepository struct{ s *Store }
+
+// Get returns the view, or ports.ErrNotFound.
+func (r *SellerStatusRepository) Get(ctx context.Context, id sellerstatus.ID) (*sellerstatus.View, error) {
+	defer r.s.enter(ctx)()
+	snap, ok := r.s.sellers[id]
+	if !ok {
+		return nil, ports.ErrNotFound
+	}
+	return sellerstatus.Restore(snap)
+}
+
+// Save stores the view under the concurrency rule.
+func (r *SellerStatusRepository) Save(ctx context.Context, v *sellerstatus.View) error {
+	defer r.s.enter(ctx)()
+	snap := v.Snapshot()
+	stored, exists := r.s.sellers[snap.ID]
+	if err := checkVersion(stored.Version, exists, snap.Version); err != nil {
+		return err
+	}
+	r.s.sellers[snap.ID] = snap
 	return nil
 }
 

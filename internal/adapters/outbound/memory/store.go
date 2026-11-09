@@ -24,6 +24,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
+	"github.com/claudioed/offer-availability/internal/domain/sellerstatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
 )
 
@@ -36,6 +37,7 @@ type Store struct {
 	feeds     map[feed.ID]feed.Snapshot
 	marks     map[listing.NodeID]time.Time
 	nodes     map[nodestatus.ID]nodestatus.Snapshot
+	sellers   map[sellerstatus.ID]sellerstatus.Snapshot
 	processed map[string]string
 	outbox    []shared.Event
 }
@@ -45,7 +47,7 @@ func NewStore() *Store {
 	return &Store{
 		items: map[catalog.ID]catalog.Snapshot{}, packs: map[catalog.ID][]catalog.PackLevelDef{}, listings: map[listing.ID]listing.Snapshot{},
 		feeds: map[feed.ID]feed.Snapshot{}, marks: map[listing.NodeID]time.Time{},
-		nodes: map[nodestatus.ID]nodestatus.Snapshot{}, processed: map[string]string{},
+		nodes: map[nodestatus.ID]nodestatus.Snapshot{}, sellers: map[sellerstatus.ID]sellerstatus.Snapshot{}, processed: map[string]string{},
 	}
 }
 
@@ -58,6 +60,7 @@ type state struct {
 	feeds     map[feed.ID]feed.Snapshot
 	marks     map[listing.NodeID]time.Time
 	nodes     map[nodestatus.ID]nodestatus.Snapshot
+	sellers   map[sellerstatus.ID]sellerstatus.Snapshot
 	processed map[string]string
 	outbox    []shared.Event
 }
@@ -73,13 +76,13 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 func (s *Store) capture() state {
 	return state{
 		items: cloneMap(s.items), packs: cloneMap(s.packs), listings: cloneMap(s.listings), feeds: cloneMap(s.feeds), marks: cloneMap(s.marks),
-		nodes: cloneMap(s.nodes), processed: cloneMap(s.processed), outbox: append([]shared.Event(nil), s.outbox...),
+		nodes: cloneMap(s.nodes), sellers: cloneMap(s.sellers), processed: cloneMap(s.processed), outbox: append([]shared.Event(nil), s.outbox...),
 	}
 }
 
 func (s *Store) restore(st state) {
-	s.items, s.packs, s.listings, s.feeds, s.marks, s.nodes, s.processed, s.outbox =
-		st.items, st.packs, st.listings, st.feeds, st.marks, st.nodes, st.processed, st.outbox
+	s.items, s.packs, s.listings, s.feeds, s.marks, s.nodes, s.sellers, s.processed, s.outbox =
+		st.items, st.packs, st.listings, st.feeds, st.marks, st.nodes, st.sellers, st.processed, st.outbox
 }
 
 // txKey marks a ctx that carries the open unit of work of one store.
@@ -110,6 +113,9 @@ func (s *Store) Marks() *NodeFeedMarks { return &NodeFeedMarks{s} }
 // Nodes returns the NodeStatusRepository double.
 func (s *Store) Nodes() *NodeStatusRepository { return &NodeStatusRepository{s} }
 
+// Sellers returns the SellerStatusRepository double.
+func (s *Store) Sellers() *SellerStatusRepository { return &SellerStatusRepository{s} }
+
 // Inbox returns the ProcessedEvents double.
 func (s *Store) Inbox() *ProcessedEvents { return &ProcessedEvents{s} }
 
@@ -121,7 +127,7 @@ func (s *Store) UnitOfWork() *UnitOfWork { return &UnitOfWork{s} }
 
 // Counts is how many rows each table of the store holds.
 type Counts struct {
-	Items, Listings, Feeds, Marks, Nodes, Processed, OutboxEvents int
+	Items, Listings, Feeds, Marks, Nodes, Sellers, Processed, OutboxEvents int
 	// VersionSum is the sum of every aggregate version: any saved change moves it.
 	VersionSum int64
 }
@@ -144,8 +150,11 @@ func (s *Store) Counts() Counts {
 	for _, n := range s.nodes {
 		versions += n.Version
 	}
+	for _, v := range s.sellers {
+		versions += v.Version
+	}
 	return Counts{
-		Items: len(s.items), Listings: len(s.listings), Feeds: len(s.feeds), Marks: len(s.marks), Nodes: len(s.nodes),
+		Items: len(s.items), Listings: len(s.listings), Feeds: len(s.feeds), Marks: len(s.marks), Nodes: len(s.nodes), Sellers: len(s.sellers),
 		Processed: len(s.processed), OutboxEvents: len(s.outbox), VersionSum: versions,
 	}
 }

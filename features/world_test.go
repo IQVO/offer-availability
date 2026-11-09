@@ -42,7 +42,7 @@ func newWorld() *world {
 	return &world{
 		store: s, items: map[string]catalog.ID{}, listings: map[string]listing.ID{}, feeds: map[string]views.InventoryFeed{},
 		deps: usecases.Deps{
-			Catalog: s.Catalog(), Listings: s.Listings(), Feeds: s.Feeds(), Marks: s.Marks(), Nodes: s.Nodes(), Inbox: s.Inbox(),
+			Catalog: s.Catalog(), Listings: s.Listings(), Feeds: s.Feeds(), Marks: s.Marks(), Nodes: s.Nodes(), Sellers: s.Sellers(), Inbox: s.Inbox(),
 			Outbox: s.Outbox(), UoW: s.UnitOfWork(), Clock: memory.NewClock(repocontract.Now), IDs: &memory.SequentialIDs{},
 		},
 	}

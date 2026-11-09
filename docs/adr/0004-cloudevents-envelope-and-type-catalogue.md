@@ -82,3 +82,34 @@ Payload rules:
   no shared Go code.
 - Adding a published type requires a line here in the same commit as its
   asyncapi message, or the architecture fitness test fails.
+
+## Amendment 2026-11-08: consumed types ([ADR 0013](./0013-seller-status-and-received-stock-drive-owner-listings.md))
+
+The catalogue also lists every type the service CONSUMES, with its full type
+string, so a producer can find its consumers here. Dispatch is on the full
+`type`; every other type on a consumed topic is acknowledged and ignored (on
+`retailnetwork.seller-inbound.events` it is also counted in
+`availability.seller_events.ignored`).
+
+```text
+type: com.retailnetwork.logistics.node-topology.node.NodeRegistered stream: events
+type: com.retailnetwork.logistics.node-topology.node.NodeActivated stream: events
+type: com.retailnetwork.logistics.node-topology.node.NodeSuspended stream: events
+type: com.retailnetwork.logistics.node-topology.node.NodeRetired stream: events
+type: com.retailnetwork.partner.seller-inbound.seller.SellerSuspended stream: events
+type: com.retailnetwork.partner.seller-inbound.seller.SellerReinstated stream: events
+```
+
+| Consumed type | Topic | Fields read | Effect |
+|---|---|---|---|
+| `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `retailnetwork.node-topology.events` | `nodeId` (+ CloudEvents `time`) | NodeStatusView `PROPOSED` (ADR 0003) |
+| `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `retailnetwork.node-topology.events` | `nodeId`, `activatedAt` | NodeStatusView `ACTIVE`; listings reconciled (ADR 0003, ADR 0013 rule 6) |
+| `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `retailnetwork.node-topology.events` | `nodeId`, `suspendedAt` | NodeStatusView `SUSPENDED`; listings `NODE_NOT_SELLABLE` |
+| `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `retailnetwork.node-topology.events` | `nodeId`, `retiredAt` | NodeStatusView `RETIRED`; listings `NODE_NOT_SELLABLE` |
+| `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `retailnetwork.seller-inbound.events` | `sellerId`, `suspendedAt` | SellerStatusView `SUSPENDED`; the seller's LIVE listings `OWNER_SUSPENDED` (ADR 0013 rule 4) |
+| `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `retailnetwork.seller-inbound.events` | `sellerId`, `reinstatedAt` | SellerStatusView `ACTIVE`; the seller's `OWNER_SUSPENDED` listings restored or handed to the remaining cause (ADR 0013 rule 5) |
+
+`reason` of `ListingSuppressed` gains `OWNER_SUSPENDED` (additive; precedence
+`DISCONTINUED` > `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED`). A consumer of
+`ListingSuppressed` keeps the latest reason per listing, as it already does for
+the A4 upgrade.

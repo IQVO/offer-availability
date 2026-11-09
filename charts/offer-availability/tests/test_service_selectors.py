@@ -33,6 +33,7 @@ BASE = [
     "--set", "database.url=postgres://u@example.invalid:5432/db",
     "--set", "kafka.brokers=kafka.example.invalid:9092",
     "--set", "config.nodeTopologyConsumerGroup=offer-availability-node-topology",
+    "--set", "config.sellerInboundConsumerGroup=offer-availability-seller-inbound",
 ]
 ENABLE_EVERYTHING = BASE + [
     "--set", "autoscaling.api.enabled=true",
@@ -45,7 +46,7 @@ ENABLE_EVERYTHING = BASE + [
 
 # Every env var cmd/api reads (cmd/api/config.go + the Postgres adapter).
 API_ENV = (
-    "DATABASE_URL", "MIGRATIONS_DATABASE_URL", "KAFKA_BROKERS", "NODE_TOPOLOGY_CONSUMER_GROUP", "HTTP_ADDR",
+    "DATABASE_URL", "MIGRATIONS_DATABASE_URL", "KAFKA_BROKERS", "NODE_TOPOLOGY_CONSUMER_GROUP", "SELLER_INBOUND_CONSUMER_GROUP", "HTTP_ADDR",
     "OUTBOX_RELAY_INTERVAL", "OUTBOX_MAX_ATTEMPTS", "RETENTION_INTERVAL", "SHUTDOWN_DRAIN_DELAY", "LOG_LEVEL",
 )
 

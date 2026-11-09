@@ -11,6 +11,7 @@ no alternative runtime and no log sink.
 | `MIGRATIONS_DATABASE_URL` | `DATABASE_URL` | Direct DSN for the boot migrations (golang-migrate holds a session advisory lock, which breaks behind a transaction-pooling proxy). |
 | `KAFKA_BROKERS` | required | Comma-separated `host:port` list (relay, consumer, `/readyz`). A boot error names it when unset or blank. |
 | `NODE_TOPOLOGY_CONSUMER_GROUP` | required | Consumer group id of the node-topology consumer. A boot error names it when unset or blank; there is no default, so a local process cannot join a live cluster's group by accident. |
+| `SELLER_INBOUND_CONSUMER_GROUP` | required | Consumer group id of the seller-inbound consumer (ADR 0013); same rules. |
 | `HTTP_ADDR` | `:8080` | Listen address. |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | Poll interval of the relay (Go duration or seconds). |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | Failures before the relay excludes a row; `0` = unlimited (ADR 0005). |
@@ -63,6 +64,9 @@ Room for the whole sequence: 5 + 10 + 10 s, so a pod needs a termination grace o
 
 ## The consumer in operation
 
+- `retailnetwork.seller-inbound.events` is read under `SELLER_INBOUND_CONSUMER_GROUP`
+  the same way (ADR 0013): only `SellerSuspended` and `SellerReinstated` are applied;
+  every other type is counted in `availability.seller_events.ignored` and skipped.
 - `retailnetwork.node-topology.events` is read under `NODE_TOPOLOGY_CONSUMER_GROUP`;
   the offset is committed after the event was handled, and each event is applied in
   one transaction together with its `processed_events` row, so a redelivery changes
@@ -88,6 +92,7 @@ capabilities dropped and the `RuntimeDefault` seccomp profile; `/healthz` backs 
 | `database.migrationsExistingSecretKey` | `MIGRATIONS_DATABASE_URL` | Optional `secretKeyRef` (`optional: true`); the binary falls back to `DATABASE_URL`. |
 | `kafka.brokers` | `KAFKA_BROKERS` | Required. |
 | `config.nodeTopologyConsumerGroup` | `NODE_TOPOLOGY_CONSUMER_GROUP` | Required, no default; stable and service-prefixed. |
+| `config.sellerInboundConsumerGroup` | `SELLER_INBOUND_CONSUMER_GROUP` | Required, no default; stable and service-prefixed. |
 | `otel.endpoint`, `otel.serviceName` (`<name>-mcp` for the mcp component, `<name>-a2a` for the a2a component), `image.tag` or appVersion, `environment` | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`, `ENVIRONMENT` | `otel.enabled=false` renders no `OTEL_*` env; `extraEnv` may not set these four. |
 | `config.httpAddr`, `logLevel`, `outboxRelayInterval`, `outboxMaxAttempts`, `retentionInterval`, `shutdownDrainDelay` | `HTTP_ADDR`, `LOG_LEVEL`, `OUTBOX_RELAY_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `RETENTION_INTERVAL`, `SHUTDOWN_DRAIN_DELAY` | Defaults repeat the binary's; the render test checks they agree. |
 

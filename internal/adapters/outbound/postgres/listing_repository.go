@@ -101,6 +101,11 @@ func (r *ListingRepo) ListByItem(ctx context.Context, item listing.ItemID) ([]*l
 	return r.many(ctx, `SELECT `+listingColumns+` FROM listings WHERE catalog_item_id = $1 ORDER BY listing_id`, string(item))
 }
 
+// ListByOwner implements ports.ListingRepository.
+func (r *ListingRepo) ListByOwner(ctx context.Context, owner listing.OwnerRef) ([]*listing.Listing, error) {
+	return r.many(ctx, `SELECT `+listingColumns+` FROM listings WHERE owner_ref = $1 ORDER BY listing_id`, string(owner))
+}
+
 // List implements ports.ListingRepository. Empty filter fields do not filter.
 func (r *ListingRepo) List(ctx context.Context, f repository.ListingFilter, page repository.Page) ([]*listing.Listing, error) {
 	return r.many(ctx, `

@@ -91,6 +91,8 @@ spec:
             # refuses an empty one.
             - name: NODE_TOPOLOGY_CONSUMER_GROUP
               value: {{ .Values.config.nodeTopologyConsumerGroup | quote }}
+            - name: SELLER_INBOUND_CONSUMER_GROUP
+              value: {{ .Values.config.sellerInboundConsumerGroup | quote }}
             # Mandatory: the relay, the consumer and /readyz all dial Kafka.
             - name: KAFKA_BROKERS
               value: {{ .Values.kafka.brokers | quote }}

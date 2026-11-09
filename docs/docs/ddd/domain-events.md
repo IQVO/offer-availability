@@ -166,6 +166,19 @@ consumer under the group named by `NODE_TOPOLOGY_CONSUMER_GROUP`. Dead letters g
 The payload copy is tolerant: only the fields above are read, the rest of the producer's payload is ignored. Source:
 `internal/adapters/inbound/kafka/node_consumer.go`, `internal/application/usecases/node_events.go`.
 
+Two more come from `seller-inbound` on `retailnetwork.seller-inbound.events` (tier `partner`, entity `seller`), read by a
+second consumer under `SELLER_INBOUND_CONSUMER_GROUP` (ADR 0013). Every other type on that topic is counted in
+`availability.seller_events.ignored` and skipped; dead letters go to `retailnetwork.seller-inbound.events.dlq`.
+
+| Event | Full `type` | Fields used | What this context does |
+| --- | --- | --- | --- |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `sellerId`, `suspendedAt` | Sets the seller `SUSPENDED` in `seller_status_view`; then `Suppress(OWNER_SUSPENDED)` on every `LIVE` listing the seller owns (a listing already suppressed keeps its higher reason). |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` | Sets the seller `ACTIVE`; then `Reconcile` on every listing of the seller suppressed for `OWNER_SUSPENDED`: restored, or handed to its node's `NODE_NOT_SELLABLE`. |
+
+A listing shows one reason, the highest active cause: `DISCONTINUED` (final) > `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED`.
+`NodeActivated` restores a listing only when its owner is not suspended; otherwise the reason becomes `OWNER_SUSPENDED`.
+Source: `internal/adapters/inbound/kafka/seller_consumer.go`, `internal/application/usecases/seller_events.go`.
+
 ### Idempotency and ordering
 
 - **Inbox.** Each consumed CloudEvents `id` is recorded in `processed_events` in the same transaction as the view update, the

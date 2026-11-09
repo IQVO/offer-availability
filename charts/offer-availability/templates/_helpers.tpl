@@ -102,13 +102,13 @@ missing as an empty value).
 {{- end -}}
 
 {{/*
-The node-topology consumer always runs, under a STABLE consumer group id that
-must come from values (cmd/api exits at boot without
-NODE_TOPOLOGY_CONSUMER_GROUP). Stable = a rescheduled pod resumes from its
+The node-topology and seller-inbound consumers always run, each under a STABLE
+consumer group id that must come from values (cmd/api exits at boot without
+NODE_TOPOLOGY_CONSUMER_GROUP or SELLER_INBOUND_CONSUMER_GROUP). Stable = a rescheduled pod resumes from its
 committed offsets; never derive it from the pod name.
 */}}
 {{- define "offer-availability.requireConsumerGroups" -}}
-{{- range $c := list (dict "key" "nodeTopologyConsumerGroup" "env" "NODE_TOPOLOGY_CONSUMER_GROUP") -}}
+{{- range $c := list (dict "key" "nodeTopologyConsumerGroup" "env" "NODE_TOPOLOGY_CONSUMER_GROUP") (dict "key" "sellerInboundConsumerGroup" "env" "SELLER_INBOUND_CONSUMER_GROUP") -}}
 {{- if not (trim (toString (index $.Values.config $c.key))) -}}
 {{- fail (printf "config.%s is required (%s): the consumer always runs and cmd/api exits at boot without a group. Use a STABLE, service-prefixed id, never the pod name." $c.key $c.env) -}}
 {{- end -}}

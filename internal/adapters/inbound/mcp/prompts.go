@@ -16,7 +16,7 @@ const investigateAvailabilitySOP = `You are investigating offer & availability f
 
 Procedure:
 1. If you only have a description, browse_catalog (keyset pages: pass the previous page's nextCursor as after) and match on title. If you already have the item's id, get_catalog_item gives its dimensions, weight, hazmat and fragile flags and whether it is DISCONTINUED.
-2. Call list_listings with catalogItemId to see every node that sells it (narrow further with nodeId when the question is about one node). Each listing is LIVE or SUPPRESSED with a reason: NODE_NOT_SELLABLE means the node cannot sell at all; DISCONTINUED means the item was discontinued after the listing was created.
+2. Call list_listings with catalogItemId to see every node that sells it (narrow further with nodeId when the question is about one node). Each listing is LIVE or SUPPRESSED with a reason: NODE_NOT_SELLABLE means the node cannot sell at all; DISCONTINUED means the item was discontinued after the listing was created; OWNER_SUSPENDED means the seller that owns the listing (ownerRef) is suspended.
 3. Read the availability each listing carries (availableQty, the vendor's basis, asOf and the feedId). When availability looks stale, zero, or surprising, call get_inventory_feed with that feedId to see what became of the feed: APPLIED means the numbers you saw were taken; SUPERSEDED means a newer feed replaced it; FAILED means nothing was taken, with failureCode listing-not-on-node (the vendor named a listing this context does not have) or negative-availability (the vendor sent a negative quantity).
 
 Interpretation:

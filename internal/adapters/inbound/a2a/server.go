@@ -84,7 +84,7 @@ func Card(cfg Config) *a2a.AgentCard {
 			{
 				ID:          skillCheckAvailability,
 				Name:        "Check where an item is sold and how much is available",
-				Description: "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
+				Description: "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason DISCONTINUED, NODE_NOT_SELLABLE or OWNER_SUSPENDED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
 				Tags:        []string{serviceName, "availability", "read", "authority:L1"},
 				InputModes:  []string{contentJSON},
 				Examples: []string{

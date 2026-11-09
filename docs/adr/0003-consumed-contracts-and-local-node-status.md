@@ -87,3 +87,34 @@ None. The model has no analytics-only event for this context.
 - The per-node policy runs in one transaction, so a node with a very large number
   of listings produces a correspondingly large transaction (bulk saves keep it to a
   few statements).
+
+## Amendment 2026-11-08: seller-inbound ([ADR 0013](./0013-seller-status-and-received-stock-drive-owner-listings.md))
+
+offer-availability now consumes a second context. The relationship and the
+contract below extend the tables above.
+
+| Counterpart | Direction | Channel | Relationship |
+| --- | --- | --- | --- |
+| seller-inbound | inbound events | Kafka `retailnetwork.seller-inbound.events` | Conformist: offer-availability adopts the producer's model of seller status |
+
+| Type | Fields read | Effect |
+| --- | --- | --- |
+| `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `sellerId`, `suspendedAt` (`reason` is not stored) | SellerStatusView `SUSPENDED`, then SuppressListing(`OWNER_SUSPENDED`) for every `LIVE` listing whose `ownerRef` is the seller |
+| `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` | SellerStatusView `ACTIVE`, then every `OWNER_SUSPENDED` listing of the seller is restored, or handed to its remaining cause |
+
+- **Local read model: SellerStatusView.** Table `seller_status_view(seller_id,
+  status, as_of, version)`, written only by the seller consumer; read by
+  `CreateListing` (rule 7) and by the node restore path (rule 6). An event older
+  than `as_of` is ignored; an unknown seller is `ACTIVE`.
+- **Every other type** on the topic is acknowledged and counted
+  (`availability.seller_events.ignored`), never applied. A seller type that
+  cannot be decoded, or lacks `sellerId` or its instant, goes to
+  `retailnetwork.seller-inbound.events.dlq`.
+- **Inbox and transaction.** The same `processed_events` inbox, in one
+  transaction with the view and the listing changes.
+- **Consumer group.** Mandatory: `SELLER_INBOUND_CONSUMER_GROUP` (chart value
+  `config.sellerInboundConsumerGroup`; proposed
+  `offer-availability-seller-inbound`). A missing value is a boot error naming
+  the variable.
+- `InboundShipmentReceived` is on the same topic and is NOT consumed yet: its
+  payload carries no received item lines (ADR 0013, "Rule 8 is blocked").

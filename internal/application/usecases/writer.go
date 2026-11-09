@@ -28,6 +28,7 @@ type Deps struct {
 	Feeds    ports.FeedRepository
 	Marks    ports.NodeFeedMarks
 	Nodes    ports.NodeStatusRepository
+	Sellers  ports.SellerStatusRepository
 	Inbox    ports.ProcessedEvents
 	Outbox   ports.EventOutbox
 	UoW      ports.UnitOfWork
