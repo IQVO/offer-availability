@@ -8,15 +8,23 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// sellerEventsIgnoredName counts the CloudEvents of
-// retailnetwork.seller-inbound.events whose type this service does not consume
-// (ADR 0013, rule 1), by type. Follows the fleet naming <ctx>.<noun>.<verb>.
+// sellerEventsIgnoredName counts what the seller-inbound consumer acknowledged
+// without effect, by full CloudEvents type and reason (ADR 0013 rule 1, ADR
+// 0014). Follows the fleet naming <ctx>.<noun>.<verb>.
 const sellerEventsIgnoredName = "availability.seller_events.ignored"
 
+// ReasonTypeNotConsumed is the reason of an event whose type this service does
+// not consume. The received-stock reasons (received_unknown, gtin_unresolved,
+// item_unknown) come from the use case (usecases.Skip*).
+const ReasonTypeNotConsumed = "type_not_consumed"
+
+// typeKey is the full CloudEvents type; reasonKey (feed_metrics.go) the reason.
 const typeKey = attribute.Key("type")
 
-// SellerEventMetrics counts the ignored types of the seller-inbound topic
-// against the global MeterProvider (a no-op until Setup installs a real one).
+// SellerEventMetrics counts the ignored types and the received-stock skips of
+// the seller-inbound topic against the global MeterProvider (a no-op until
+// Setup installs a real one). It is both the consumer's IgnoredEvents and the
+// use case's ports.ReceivedStockMetrics.
 type SellerEventMetrics struct {
 	ignored metric.Int64Counter
 }
@@ -27,9 +35,11 @@ type SellerEventMetrics struct {
 func NewSellerEventMetrics() (*SellerEventMetrics, error) {
 	ignored, err := otel.Meter(meterName).Int64Counter(
 		sellerEventsIgnoredName,
-		metric.WithDescription("seller-inbound events acknowledged without effect because offer-availability does not consume their type "+
-			"(only SellerSuspended and SellerReinstated are applied), by full CloudEvents type. A type that keeps rising is "+
-			"one the producer publishes that this context may need to consume."),
+		metric.WithDescription("seller-inbound events, or received lines of InboundShipmentReceived, acknowledged without effect, "+
+			"by full CloudEvents type and reason: type_not_consumed (a type offer-availability does not consume; one that keeps "+
+			"rising may need consuming), received_unknown (an InboundShipmentReceived without its received list, published before "+
+			"the producer carried it), gtin_unresolved (one received line whose GTIN no catalogue item holds), item_unknown "+
+			"(one received line whose catalogItemId the catalogue does not hold)."),
 		metric.WithUnit("{event}"),
 	)
 	if err != nil {
@@ -38,7 +48,17 @@ func NewSellerEventMetrics() (*SellerEventMetrics, error) {
 	return &SellerEventMetrics{ignored: ignored}, nil
 }
 
-// Ignored counts one event of eventType that was acknowledged without effect.
+// Ignored counts one event of eventType whose type this service does not
+// consume.
 func (m *SellerEventMetrics) Ignored(ctx context.Context, eventType string) {
-	m.ignored.Add(ctx, 1, metric.WithAttributes(typeKey.String(eventType)))
+	m.add(ctx, eventType, ReasonTypeNotConsumed)
+}
+
+// ReceivedSkipped counts one received-stock skip (ports.ReceivedStockMetrics).
+func (m *SellerEventMetrics) ReceivedSkipped(ctx context.Context, eventType, reason string) {
+	m.add(ctx, eventType, reason)
+}
+
+func (m *SellerEventMetrics) add(ctx context.Context, eventType, reason string) {
+	m.ignored.Add(ctx, 1, metric.WithAttributes(typeKey.String(eventType), reasonKey.String(reason)))
 }

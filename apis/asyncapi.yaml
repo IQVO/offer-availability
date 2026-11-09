@@ -49,8 +49,11 @@ info:
     `retailnetwork.seller-inbound.events`, in the consumer group given by the
     mandatory `SELLER_INBOUND_CONSUMER_GROUP`, feed the local SellerStatusView
     and suppress or restore the listings the seller owns (reason
-    OWNER_SUSPENDED, ADR 0013); every other type on that topic is acknowledged
-    and counted (`availability.seller_events.ignored`), never applied.
+    OWNER_SUSPENDED, ADR 0013). `InboundShipmentReceived` on the same topic
+    creates the seller's listings of the received stock (ADR 0014). Every other
+    type on that topic is acknowledged and counted
+    (`availability.seller_events.ignored`, reason `type_not_consumed`), never
+    applied.
 
     **Analytics.** The model names no analytics-only event for this context, so
     nothing is published on `retailnetwork.offer-availability.analytics`.
@@ -132,16 +135,19 @@ channels:
     title: seller-inbound integration topic (consumed)
     description: |
       Owned by seller-inbound; consumed here (ADR 0013). Key = the aggregate
-      root id (sellerId for the two seller types below), so one seller's events
-      arrive in order on one partition. Only the two seller status types below
-      are used; every other type on the topic (the inbound shipment events, the
-      placement suggestion, any future type) is acknowledged, counted and
-      ignored.
+      root id (sellerId for the two seller types below, shipmentId for
+      InboundShipmentReceived), so one seller's status events arrive in order on
+      one partition. The two seller status types and InboundShipmentReceived
+      (ADR 0014) are used; every other type on the topic (the other inbound
+      shipment events, the placement suggestion, any future type) is
+      acknowledged, counted and ignored.
     messages:
       SellerSuspended:
         $ref: "#/components/messages/SellerSuspended"
       SellerReinstated:
         $ref: "#/components/messages/SellerReinstated"
+      InboundShipmentReceived:
+        $ref: "#/components/messages/InboundShipmentReceived"
 
 operations:
   publishOfferAvailabilityEvents:
@@ -230,6 +236,37 @@ operations:
     messages:
       - $ref: "#/channels/sellerInboundEvents/messages/SellerSuspended"
       - $ref: "#/channels/sellerInboundEvents/messages/SellerReinstated"
+  receiveSellerInboundReceivedStock:
+    action: receive
+    title: Receive seller-inbound received shipments
+    summary: Create the seller's listings of the stock an inbound shipment received.
+    description: |
+      Consumed from `retailnetwork.seller-inbound.events` by the same consumer
+      and group as the seller status events (ADR 0014, building ADR 0013 rule
+      8). For each `received` line with `qtyEaches` > 0 the item is the line's
+      `catalogItemId`, or else the catalogue item holding its `gtin` (an item
+      GTIN or any pack level GTIN, retired levels included). Each resolved item
+      without a listing of (item, `nodeId`, ownerRef = `sellerId`) gets one:
+      ListingCreated (availability 0, basis UNKNOWN), then ListingSuppressed when
+      the node is not sellable, the item is discontinued or the owner is
+      SUSPENDED. An existing listing is not touched; availability comes only
+      from the vendor's inventory feed. One transaction per event, the
+      CloudEvents id recorded in `processed_events`.
+
+      Skips are acknowledged and counted in `availability.seller_events.ignored`
+      (attribute `reason`), never errors: an event without `received`
+      (published before the producer carried it) creates nothing
+      (`received_unknown`); a line whose GTIN no item holds is logged at WARN
+      (`gtin_unresolved`); a line whose `catalogItemId` the catalogue does not
+      hold likewise (`item_unknown`). An undecodable `data`, or one without
+      `sellerId` or `nodeId`, is dead-lettered to
+      `retailnetwork.seller-inbound.events.dlq`.
+    tags:
+      - name: seller-inbound
+    channel:
+      $ref: "#/channels/sellerInboundEvents"
+    messages:
+      - $ref: "#/channels/sellerInboundEvents/messages/InboundShipmentReceived"
 
 components:
   messages:
@@ -645,6 +682,44 @@ components:
               sellerId: "seller-77"
               reinstatedAt: "2026-10-25T09:00:00Z"
 
+    InboundShipmentReceived:
+      name: InboundShipmentReceived
+      title: Inbound shipment received (consumed)
+      summary: seller-inbound closed the receipt of an inbound shipment.
+      description: "Consumed. `type` = `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived`. Creates, for each received item that has no listing of (item, `nodeId`, ownerRef = `sellerId`), the seller's listing (ListingCreated, availability 0 / UNKNOWN; ListingSuppressed when a cause holds). Lines resolve by `catalogItemId`, else by `gtin` through the catalogue's GTIN/packaging index; unresolvable lines and events without `received` are counted, never errors (ADR 0014)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: seller-inbound
+      payload:
+        $ref: "#/components/schemas/InboundShipmentReceivedIn"
+      examples:
+        - name: inboundShipmentReceived
+          summary: A shipment received one resolved and one GTIN-only line.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1ca4"
+            source: "/retailnetwork/seller-inbound"
+            type: "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived"
+            subject: "shp-1"
+            time: "2026-10-24T12:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:seller-inbound:events:InboundShipmentReceived:v1"
+            data:
+              shipmentId: "shp-1"
+              sellerId: "S-1"
+              nodeId: "n-1"
+              status: "CLOSED"
+              cartons:
+                - sscc: "006141410000000012"
+                  status: "RECEIVED"
+              receivedAt: "2026-10-24T12:00:00Z"
+              received:
+                - catalogItemId: "item-1"
+                  gtin: "00614141000012"
+                  qtyEaches: 24
+                - gtin: "00614141000036"
+                  qtyEaches: 6
+
   schemas:
     CloudEventEnvelope:
       type: object
@@ -892,3 +967,28 @@ components:
           properties:
             sellerId: { type: string }
             reinstatedAt: { type: string, format: date-time }
+
+    InboundShipmentReceivedIn:
+      type: object
+      description: Tolerant copy of the seller-inbound InboundShipmentReceived envelope (seller-inbound ADR 0014); only the fields read are declared. `status`, `cartons` and `receivedAt` are not read.
+      required: [id, type, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived }
+        data:
+          type: object
+          required: [sellerId, nodeId]
+          properties:
+            shipmentId: { type: string, description: Logged only. }
+            sellerId: { type: string, description: The ownerRef of the listings created. }
+            nodeId: { type: string }
+            received:
+              type: array
+              description: The stock received per item, sorted by gtin, zero lines omitted. Absent on events published before seller-inbound ADR 0014, which create nothing (counted received_unknown).
+              items:
+                type: object
+                required: [gtin, qtyEaches]
+                properties:
+                  catalogItemId: { type: string, description: Omitted when the producer could not resolve it; the line then resolves by gtin. }
+                  gtin: { type: string, pattern: "^[0-9]{14}$", description: The EACH GTIN when the producer resolved it, otherwise the carton GTIN. }
+                  qtyEaches: { type: integer, minimum: 1, description: A line is used when > 0; the quantity is never applied as availability. }

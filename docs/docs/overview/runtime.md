@@ -65,8 +65,11 @@ Room for the whole sequence: 5 + 10 + 10 s, so a pod needs a termination grace o
 ## The consumer in operation
 
 - `retailnetwork.seller-inbound.events` is read under `SELLER_INBOUND_CONSUMER_GROUP`
-  the same way (ADR 0013): only `SellerSuspended` and `SellerReinstated` are applied;
-  every other type is counted in `availability.seller_events.ignored` and skipped.
+  the same way (ADR 0013): `SellerSuspended` and `SellerReinstated` are applied, and
+  `InboundShipmentReceived` creates the seller's listings of the received stock
+  (ADR 0014; skipped lines and events without `received` are counted by `reason`);
+  every other type is counted in `availability.seller_events.ignored`
+  (`reason=type_not_consumed`) and skipped.
 - `retailnetwork.node-topology.events` is read under `NODE_TOPOLOGY_CONSUMER_GROUP`;
   the offset is committed after the event was handled, and each event is applied in
   one transaction together with its `processed_events` row, so a redelivery changes

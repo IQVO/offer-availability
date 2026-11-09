@@ -22,14 +22,21 @@ const SellerTopic = "retailnetwork.seller-inbound.events"
 
 // The consumed seller-inbound CloudEvents types (full `type` strings).
 const (
-	typeSellerSuspended  = "com.retailnetwork.partner.seller-inbound.seller.SellerSuspended"
-	typeSellerReinstated = "com.retailnetwork.partner.seller-inbound.seller.SellerReinstated"
+	typeSellerSuspended         = "com.retailnetwork.partner.seller-inbound.seller.SellerSuspended"
+	typeSellerReinstated        = "com.retailnetwork.partner.seller-inbound.seller.SellerReinstated"
+	typeInboundShipmentReceived = "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived"
 )
 
 // sellerEventUseCase is what the consumer calls; *usecases.ApplySellerEvent
 // satisfies it.
 type sellerEventUseCase interface {
 	Execute(ctx context.Context, ev usecases.SellerEvent) error
+}
+
+// receivedStockUseCase is what the consumer calls for InboundShipmentReceived;
+// *usecases.ApplyReceivedStock satisfies it (ADR 0014).
+type receivedStockUseCase interface {
+	Execute(ctx context.Context, ev usecases.ReceivedStockEvent) (usecases.ReceivedStockResult, error)
 }
 
 // IgnoredEvents counts the CloudEvents of SellerTopic whose type this service
@@ -48,13 +55,16 @@ type sellerData struct {
 }
 
 // SellerConsumer reads SellerTopic under a stable consumer group and applies
-// SellerSuspended and SellerReinstated, dispatching on the FULL CloudEvents
-// `type`. Every other type on the topic is acknowledged and counted.
+// SellerSuspended, SellerReinstated and InboundShipmentReceived, dispatching on
+// the FULL CloudEvents `type`. Every other type on the topic is acknowledged
+// and counted.
 type SellerConsumer struct {
 	Reader  Reader
 	UseCase sellerEventUseCase
-	Logger  *slog.Logger
-	Retry   RetryPolicy
+	// Received creates the owner listings of a received shipment (ADR 0014).
+	Received receivedStockUseCase
+	Logger   *slog.Logger
+	Retry    RetryPolicy
 	// Ignored counts the types of the topic the service does not consume.
 	Ignored IgnoredEvents
 	// DLQ is the dead-letter writer (topic SellerTopic + DLQSuffix), with the
@@ -67,13 +77,14 @@ type SellerConsumer struct {
 // NewSellerConsumer builds the consumer reading SellerTopic from brokers under
 // groupID (from an environment variable at the composition root, never a
 // literal). Constructing the reader and the writer does not dial.
-func NewSellerConsumer(brokers []string, groupID string, uc sellerEventUseCase, ignored IgnoredEvents, logger *slog.Logger) *SellerConsumer {
+func NewSellerConsumer(brokers []string, groupID string, uc sellerEventUseCase, received receivedStockUseCase, ignored IgnoredEvents, logger *slog.Logger) *SellerConsumer {
 	return &SellerConsumer{
-		Reader:  kafkago.NewReader(readerConfig(brokers, SellerTopic, groupID)),
-		UseCase: uc,
-		Logger:  defaultLogger(logger),
-		Ignored: ignored,
-		DLQ:     newDomainDLQWriter(brokers),
+		Reader:   kafkago.NewReader(readerConfig(brokers, SellerTopic, groupID)),
+		UseCase:  uc,
+		Received: received,
+		Logger:   defaultLogger(logger),
+		Ignored:  ignored,
+		DLQ:      newDomainDLQWriter(brokers),
 	}
 }
 
@@ -119,6 +130,9 @@ func (c *SellerConsumer) HandleMessage(ctx context.Context, value []byte) error 
 	if err != nil {
 		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", SellerTopic, "error", err)
 		return nil
+	}
+	if e.Type() == typeInboundShipmentReceived && c.Received != nil {
+		return c.handleReceived(ctx, logger, e)
 	}
 	ev, handled, err := sellerEventFrom(e)
 	if err != nil {

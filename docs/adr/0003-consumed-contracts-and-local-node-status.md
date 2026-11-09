@@ -118,3 +118,22 @@ contract below extend the tables above.
   the variable.
 - `InboundShipmentReceived` is on the same topic and is NOT consumed yet: its
   payload carries no received item lines (ADR 0013, "Rule 8 is blocked").
+
+## Amendment 2026-11-09: received stock ([ADR 0014](./0014-received-stock-creates-owner-listings.md))
+
+seller-inbound's `InboundShipmentReceived` now carries the received item lines,
+so the seller-inbound consumer applies it (ADR 0013 rule 8). The last bullet of
+the 2026-11-08 amendment ("NOT consumed yet") no longer holds.
+
+| Type | Fields read | Effect |
+| --- | --- | --- |
+| `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `sellerId`, `nodeId`, `received[].{catalogItemId?, gtin, qtyEaches}` (`shipmentId` for logs only; `status`, `cartons`, `receivedAt` not read) | For each line with `qtyEaches` > 0, the item from `catalogItemId` or else from `gtin` through the local GTIN/packaging index (ADR 0006); each resolved item without a listing of (item, `nodeId`, `sellerId`) gets one (ListingCreated at 0 / `UNKNOWN`, ListingSuppressed when a cause holds); an existing listing is untouched |
+
+- **Absent `received`** (an event published before seller-inbound's ADR 0014):
+  UNKNOWN, nothing is created, counted `availability.seller_events.ignored`
+  with `reason=received_unknown`; the id still lands in `processed_events`.
+- **Unresolvable lines** are skipped with a WARN and counted (`gtin_unresolved`,
+  `item_unknown`), never errors. A payload that does not decode or lacks
+  `sellerId`/`nodeId` goes to `retailnetwork.seller-inbound.events.dlq`.
+- **Same topic, group, inbox and transaction rule** as the seller status events:
+  no new consumer group, topic or environment variable.

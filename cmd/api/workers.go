@@ -64,11 +64,11 @@ func startNodeConsumer(uc *usecases.ApplyNodeEvent, cfg config, logger *slog.Log
 	})
 }
 
-// startSellerConsumer starts the seller-inbound consumer (ADR 0013) under the
-// group id of SELLER_INBOUND_CONSUMER_GROUP. The reader dials on its first
-// fetch, inside its own goroutine, never here.
-func startSellerConsumer(uc *usecases.ApplySellerEvent, ignored inboundkafka.IgnoredEvents, cfg config, logger *slog.Logger) (*worker, func()) {
-	consumer := inboundkafka.NewSellerConsumer(brokerList(cfg.brokers), cfg.sellerGroup, uc, ignored, logger)
+// startSellerConsumer starts the seller-inbound consumer (ADR 0013, ADR 0014)
+// under the group id of SELLER_INBOUND_CONSUMER_GROUP. The reader dials on its
+// first fetch, inside its own goroutine, never here.
+func startSellerConsumer(uc *usecases.ApplySellerEvent, received *usecases.ApplyReceivedStock, ignored inboundkafka.IgnoredEvents, cfg config, logger *slog.Logger) (*worker, func()) {
+	consumer := inboundkafka.NewSellerConsumer(brokerList(cfg.brokers), cfg.sellerGroup, uc, received, ignored, logger)
 	logger.Info("seller-inbound consumer running", "topic", inboundkafka.SellerTopic, "group", cfg.sellerGroup)
 	return startWorker("seller-inbound-consumer", logger, consumer.Run, func() {
 		if err := consumer.Close(); err != nil {

@@ -55,7 +55,7 @@ func sellerEnvelope(id, typ, data string) []byte {
 func newSellerConsumer(uc sellerEventUseCase) (*SellerConsumer, *countingIgnored, *bytes.Buffer) {
 	var logs bytes.Buffer
 	ignored := &countingIgnored{}
-	return &SellerConsumer{UseCase: uc, Ignored: ignored, Logger: slog.New(slog.NewTextHandler(&logs, nil))}, ignored, &logs
+	return &SellerConsumer{UseCase: uc, Received: &recordingReceivedUseCase{}, Ignored: ignored, Logger: slog.New(slog.NewTextHandler(&logs, nil))}, ignored, &logs
 }
 
 func TestSellerConsumerMapsBothEvents(t *testing.T) {
@@ -89,7 +89,7 @@ func TestSellerConsumerIgnoresAndCountsOtherTypesOfTheTopic(t *testing.T) {
 	uc := &recordingSellerUseCase{}
 	consumer, ignored, logs := newSellerConsumer(uc)
 	others := []string{
-		"com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived",
+		"com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled",
 		"com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped",
 		"com.retailnetwork.partner.seller-inbound.seller.SellerOnboarded",
 		// A suffix match is not a dispatch: the FULL type decides.
@@ -126,6 +126,12 @@ func TestSellerConsumerSkipsWhatIsNotACloudEvent(t *testing.T) {
 	bare := &SellerConsumer{UseCase: uc, Logger: discard()}
 	if err := bare.HandleMessage(context.Background(), sellerEnvelope("ev-1", "com.example.Other", `{}`)); err != nil || len(uc.got) != 0 {
 		t.Fatalf("nil counter: %v %v", err, uc.got)
+	}
+	// Without a received-stock use case InboundShipmentReceived is an ignored type, as before ADR 0014.
+	bare.Ignored = ignored
+	if err := bare.HandleMessage(context.Background(), sellerEnvelope("ev-2", typeInboundShipmentReceived, `{}`)); err != nil ||
+		ignored.types[len(ignored.types)-1] != typeInboundShipmentReceived {
+		t.Fatalf("nil received use case: %v %v", err, ignored.types)
 	}
 }
 
@@ -224,7 +230,7 @@ func sellerMsg(offset int64, value []byte) kafkago.Message {
 func TestSellerConsumerRunDeadLettersPoisonToItsOwnTopic(t *testing.T) {
 	bad := sellerEnvelope("ev-1", typeSellerSuspended, `{"suspendedAt":"2026-11-08T10:00:00Z"}`)
 	good := sellerEnvelope("ev-2", typeSellerSuspended, `{"sellerId":"seller-1","suspendedAt":"2026-11-08T10:00:00Z"}`)
-	other := sellerEnvelope("ev-3", "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived", `{}`)
+	other := sellerEnvelope("ev-3", "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped", `{}`)
 	uc := &recordingSellerUseCase{}
 	dlq := &fakeDLQ{}
 	reader := &fakeReader{msgs: []kafkago.Message{sellerMsg(0, bad), sellerMsg(1, good), sellerMsg(2, other)}}
@@ -252,8 +258,9 @@ func TestSellerConsumerRunDeadLettersPoisonToItsOwnTopic(t *testing.T) {
 
 func TestNewSellerConsumerWiresTheTopicAndTheGroupWithoutDialling(t *testing.T) {
 	ignored := &countingIgnored{}
-	c := NewSellerConsumer([]string{"127.0.0.1:1"}, "offer-availability-seller-test", &recordingSellerUseCase{}, ignored, nil)
-	if c.Reader == nil || c.DLQ == nil || c.Logger == nil || c.Ignored != ignored {
+	received := &recordingReceivedUseCase{}
+	c := NewSellerConsumer([]string{"127.0.0.1:1"}, "offer-availability-seller-test", &recordingSellerUseCase{}, received, ignored, nil)
+	if c.Reader == nil || c.DLQ == nil || c.Logger == nil || c.Ignored != ignored || c.Received != received {
 		t.Fatalf("consumer = %+v", c)
 	}
 	r, ok := c.Reader.(*kafkago.Reader)

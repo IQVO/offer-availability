@@ -9,9 +9,13 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/claudioed/offer-availability/internal/adapters/outbound/telemetry"
+	"github.com/claudioed/offer-availability/internal/application/ports"
 )
 
-func TestSellerEventMetricsCountsIgnoredTypes(t *testing.T) {
+// The metrics adapter is the use case's port too.
+var _ ports.ReceivedStockMetrics = (*telemetry.SellerEventMetrics)(nil)
+
+func TestSellerEventMetricsCountsByTypeAndReason(t *testing.T) {
 	reader := sdkmetric.NewManualReader()
 	previous := otel.GetMeterProvider()
 	otel.SetMeterProvider(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)))
@@ -26,8 +30,31 @@ func TestSellerEventMetricsCountsIgnoredTypes(t *testing.T) {
 	ctx := context.Background()
 	metrics.Ignored(ctx, shipped)
 	metrics.Ignored(ctx, shipped)
-	metrics.Ignored(ctx, received)
+	metrics.ReceivedSkipped(ctx, received, "received_unknown")
+	metrics.ReceivedSkipped(ctx, received, "gtin_unresolved")
+	metrics.ReceivedSkipped(ctx, received, "gtin_unresolved")
+	metrics.ReceivedSkipped(ctx, received, "gtin_unresolved")
 
+	got := ignoredPoints(t, reader)
+	want := map[string]int64{
+		shipped + " type_not_consumed": 2,
+		received + " received_unknown": 1,
+		received + " gtin_unresolved":  3,
+	}
+	if len(got) != len(want) {
+		t.Fatalf("data points = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("data points = %v, want %v", got, want)
+		}
+	}
+}
+
+// ignoredPoints collects availability.seller_events.ignored keyed "type reason".
+func ignoredPoints(t *testing.T, reader *sdkmetric.ManualReader) map[string]int64 {
+	t.Helper()
+	ctx := context.Background()
 	var collected metricdata.ResourceMetrics
 	if err := reader.Collect(ctx, &collected); err != nil {
 		t.Fatalf("Collect: %v", err)
@@ -47,11 +74,10 @@ func TestSellerEventMetricsCountsIgnoredTypes(t *testing.T) {
 			}
 			for _, p := range sum.DataPoints {
 				typ, _ := p.Attributes.Value("type")
-				got[typ.AsString()] = p.Value
+				reason, _ := p.Attributes.Value("reason")
+				got[typ.AsString()+" "+reason.AsString()] = p.Value
 			}
 		}
 	}
-	if len(got) != 2 || got[shipped] != 2 || got[received] != 1 {
-		t.Fatalf("data points = %v", got)
-	}
+	return got
 }

@@ -78,7 +78,9 @@ span several aggregates in that one unit of work (ADR 0002, A11).
   (`feeds.go`); `ApplyNodeEvent` (`node_events.go`: inbox claim, status change,
   policy `SuppressOnNodeUnavailable` = `SuppressListing` / `Reconcile`);
   `ApplySellerEvent` (`seller_events.go`: inbox claim, seller status change,
-  `SuppressListing(OWNER_SUSPENDED)` / `Reconcile`, ADR 0013).
+  `SuppressListing(OWNER_SUSPENDED)` / `Reconcile`, ADR 0013); `ApplyReceivedStock`
+  (`received_stock.go`: inbox claim, then the seller's listings of the received
+  items via `listing.CreateOwned`, skipped lines counted, ADR 0014).
 - `ApplyAvailability`, `SuppressListing`, `RestoreListing` are `Listing` methods
   run inside those use cases; they have no REST operation of their own.
 - Queries (`queries.go`): `BrowseCatalog`, `GetCatalogItem`, `ListListings`,

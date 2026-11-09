@@ -183,3 +183,22 @@ type FeedMetrics interface {
 	FeedFailed(ctx context.Context, reason string)
 	FeedRejected(ctx context.Context, reason string)
 }
+
+// ReceivedStockMetrics counts what ApplyReceivedStock acknowledged without
+// effect (ADR 0014), on the counter availability.seller_events.ignored by full
+// CloudEvents type and reason. The use case calls it once per skip, after its
+// unit of work committed (a retried attempt or a redelivered id never counts
+// twice):
+//
+//   - "received_unknown": the event carries no `received` list (published
+//     before the producer added it), one per event;
+//   - "gtin_unresolved": one received line without catalogItemId whose GTIN no
+//     catalogue item holds;
+//   - "item_unknown": one received line whose catalogItemId the catalogue does
+//     not hold.
+//
+// The implementation lives in internal/adapters/outbound/telemetry; a nil
+// Deps.ReceivedMetrics records nothing.
+type ReceivedStockMetrics interface {
+	ReceivedSkipped(ctx context.Context, eventType, reason string)
+}
