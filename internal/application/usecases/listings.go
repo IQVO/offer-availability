@@ -6,7 +6,6 @@ import (
 	"github.com/claudioed/offer-availability/internal/application/views"
 	"github.com/claudioed/offer-availability/internal/domain/catalog"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
-	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
 )
 
@@ -27,8 +26,10 @@ func NewCreateListing(d Deps) *CreateListing { return &CreateListing{writer{d}} 
 // Execute loads the item (unknown is ports.ErrNotFound), refuses a second
 // listing for the pair (listing.ErrDuplicateListing), reads the node's status
 // from the local NodeStatusView (an unknown node is not sellable, ADR 0002, A5)
-// and saves the new listing with ListingCreated and, when it starts
-// SUPPRESSED, ListingSuppressed.
+// and the owner's from the local SellerStatusView (a SUSPENDED owner starts the
+// listing SUPPRESSED(OWNER_SUSPENDED), ADR 0013 rule 7) and saves the new
+// listing with ListingCreated and, when it starts SUPPRESSED,
+// ListingSuppressed.
 func (uc *CreateListing) Execute(ctx context.Context, cmd CreateListingCommand) (views.Listing, error) {
 	if !cmd.CatalogItemID.Valid() || !cmd.NodeID.Valid() {
 		return views.Listing{}, shared.Invalid("catalogItemId and nodeId must be valid ids")
@@ -53,8 +54,12 @@ func (uc *CreateListing) Execute(ctx context.Context, cmd CreateListingCommand) 
 		if err != nil {
 			return views.Listing{}, err
 		}
+		suspended, err := uc.ownerSuspended(ctx, cmd.OwnerRef)
+		if err != nil {
+			return views.Listing{}, err
+		}
 		l, events, err := listing.CreateOwned(uc.IDs.NewListingID(), itemID, cmd.NodeID, cmd.OwnerRef,
-			listing.Sellability{NodeActive: active, ItemDiscontinued: item.Discontinued()}, uc.now())
+			listing.Sellability{NodeActive: active, ItemDiscontinued: item.Discontinued(), OwnerSuspended: suspended}, uc.now())
 		if err != nil {
 			return views.Listing{}, err
 		}
@@ -78,14 +83,4 @@ func (uc *CreateListing) pairTaken(ctx context.Context, item listing.ItemID, nod
 		_, err = uc.Listings.FindByItemNodeOwner(ctx, item, node, owner)
 	}
 	return found(err)
-}
-
-// nodeActive reports whether the local view says the node is ACTIVE.
-func (uc *CreateListing) nodeActive(ctx context.Context, node listing.NodeID) (bool, error) {
-	v, err := uc.Nodes.Get(ctx, nodestatus.ID(node))
-	hit, err := found(err)
-	if err != nil || !hit {
-		return false, err
-	}
-	return v.Sellable(), nil
 }

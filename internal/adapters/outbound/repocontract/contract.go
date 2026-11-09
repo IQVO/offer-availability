@@ -33,6 +33,7 @@ const (
 	node1 = "node-1"
 	node2 = "node-2"
 
+	caseRoundTrip   = "save then get round-trips the snapshot"
 	caseGetMiss     = "get of an unknown id is ErrNotFound"
 	caseDuplicateID = "creating an id that exists is ErrConcurrentUpdate"
 	caseVersionRace = "an update expects the stored version to be version-1"
@@ -45,6 +46,7 @@ type Fixture struct {
 	Feeds    ports.FeedRepository
 	Marks    ports.NodeFeedMarks
 	Nodes    ports.NodeStatusRepository
+	Sellers  ports.SellerStatusRepository
 	Inbox    ports.ProcessedEvents
 	Outbox   ports.EventOutbox
 	UoW      ports.UnitOfWork
@@ -75,6 +77,8 @@ func Run(t *testing.T, factory Factory) {
 		{"Feed", feedCases},
 		{"NodeFeedMarks", markCases},
 		{"NodeStatus", nodeStatusCases},
+		{"SellerStatus", sellerStatusCases},
+		{"ListingOwner", listingOwnerCases},
 		{"Inbox", inboxCases},
 		{"UnitOfWork", unitOfWorkCases},
 	}

@@ -166,6 +166,22 @@ consumer under the group named by `NODE_TOPOLOGY_CONSUMER_GROUP`. Dead letters g
 The payload copy is tolerant: only the fields above are read, the rest of the producer's payload is ignored. Source:
 `internal/adapters/inbound/kafka/node_consumer.go`, `internal/application/usecases/node_events.go`.
 
+Three more come from `seller-inbound` on `retailnetwork.seller-inbound.events` (tier `partner`, entities `seller` and
+`inboundshipment`), read by a second consumer under `SELLER_INBOUND_CONSUMER_GROUP` (ADR 0013, ADR 0014). Every other type
+on that topic is counted in `availability.seller_events.ignored` (`reason=type_not_consumed`) and skipped; dead letters go
+to `retailnetwork.seller-inbound.events.dlq`.
+
+| Event | Full `type` | Fields used | What this context does |
+| --- | --- | --- | --- |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `sellerId`, `suspendedAt` | Sets the seller `SUSPENDED` in `seller_status_view`; then `Suppress(OWNER_SUSPENDED)` on every `LIVE` listing the seller owns (a listing already suppressed keeps its higher reason). |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` | Sets the seller `ACTIVE`; then `Reconcile` on every listing of the seller suppressed for `OWNER_SUSPENDED`: restored, or handed to its node's `NODE_NOT_SELLABLE`. |
+| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `sellerId`, `nodeId`, `received[].{catalogItemId?, gtin, qtyEaches}` | For each line with eaches > 0, resolves the item (`catalogItemId`, else the GTIN/packaging index) and creates the seller's listing on the node when none exists (`ListingCreated` at 0 / `UNKNOWN`, `ListingSuppressed` when a cause holds). Unresolvable lines and an absent `received` are counted, never errors (ADR 0014). |
+
+A listing shows one reason, the highest active cause: `DISCONTINUED` (final) > `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED`.
+`NodeActivated` restores a listing only when its owner is not suspended; otherwise the reason becomes `OWNER_SUSPENDED`.
+Source: `internal/adapters/inbound/kafka/seller_consumer.go`, `internal/adapters/inbound/kafka/received_consumer.go`,
+`internal/application/usecases/seller_events.go`, `internal/application/usecases/received_stock.go`.
+
 ### Idempotency and ordering
 
 - **Inbox.** Each consumed CloudEvents `id` is recorded in `processed_events` in the same transaction as the view update, the

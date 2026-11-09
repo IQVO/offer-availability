@@ -39,9 +39,13 @@ func NewApplyNodeEvent(d Deps) *ApplyNodeEvent { return &ApplyNodeEvent{writer{d
 //   - NodeActivated, NodeSuspended and NodeRetired go through
 //     nodestatus.View.Observe; an Ignored observation (older than the status, or
 //     the node is RETIRED) touches nothing;
-//   - a Changed or Repeated observation runs the policy: ACTIVE restores the
-//     listings of the node suppressed for NODE_NOT_SELLABLE, SUSPENDED and
-//     RETIRED suppress every LIVE listing (ADR 0002, A13 and A14).
+//   - a Changed or Repeated observation runs the policy: ACTIVE reconciles
+//     every SUPPRESSED listing of the node against its three causes, so a
+//     listing suppressed for NODE_NOT_SELLABLE is restored unless its owner is
+//     SUSPENDED, in which case its reason becomes OWNER_SUSPENDED (ADR 0013,
+//     rule 6); SUSPENDED and RETIRED suppress every listing for which
+//     NODE_NOT_SELLABLE is the higher cause (LIVE or OWNER_SUSPENDED; ADR 0002,
+//     A13 and A14).
 //
 // A malformed event is shared.ErrValidation; the adapter dead-letters it.
 func (uc *ApplyNodeEvent) Execute(ctx context.Context, ev NodeEvent) error {
@@ -115,11 +119,20 @@ func (uc *ApplyNodeEvent) suppressListings(ctx context.Context, v *nodestatus.Vi
 	})
 }
 
-// restoreListings is RestoreListing for every listing of the node suppressed for
-// NODE_NOT_SELLABLE.
+// restoreListings is RestoreListing for every SUPPRESSED listing of the node:
+// Reconcile moves it to its highest remaining cause (none: LIVE; a SUSPENDED
+// owner: OWNER_SUSPENDED; DISCONTINUED stays final). A LIVE listing is left
+// alone.
 func (uc *ApplyNodeEvent) restoreListings(ctx context.Context, v *nodestatus.View) ([]shared.Event, error) {
 	return uc.eachListing(ctx, v, func(l *listing.Listing) ([]shared.Event, error) {
-		return l.Restore(v.Sellable(), uc.now())
+		if l.State() != listing.StateSuppressed {
+			return nil, nil
+		}
+		s, err := uc.sellability(ctx, l)
+		if err != nil {
+			return nil, err
+		}
+		return l.Reconcile(s, uc.now()), nil
 	})
 }
 
@@ -144,6 +157,9 @@ func (uc *ApplyNodeEvent) eachListing(
 		}
 		if err != nil {
 			return nil, err
+		}
+		if len(ev) == 0 {
+			continue
 		}
 		changed = append(changed, l)
 		events = append(events, ev...)

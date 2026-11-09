@@ -9,11 +9,13 @@ chart_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 repo_dir="$(cd "$chart_dir/../.." && pwd)"
 release=offer-availability
 group=offer-availability-node-topology
+seller_group=offer-availability-seller-inbound
 # Dummy values, no password: the chart refuses to render without a database
-# source, Kafka brokers and the consumer group. None is ever dialled.
+# source, Kafka brokers and the two consumer groups. None is ever dialled.
 base=(--set database.url=postgres://u@example.invalid:5432/db
   --set kafka.brokers=kafka.example.invalid:9092
-  --set "config.nodeTopologyConsumerGroup=$group")
+  --set "config.nodeTopologyConsumerGroup=$group"
+  --set "config.sellerInboundConsumerGroup=$seller_group")
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -47,8 +49,8 @@ binary_env() {
 # Word splitting is safe: the names are [A-Z0-9_] only (bash 3.2 has no mapfile).
 # shellcheck disable=SC2207
 vars=($(binary_env))
-(( ${#vars[@]} == 11 )) || fail "found ${#vars[@]} env constants (${vars[*]}), want the 11 of docs/docs/operations/before-first-release.md row 8; the scan is looking in the wrong place or the binary changed"
-for var in DATABASE_URL MIGRATIONS_DATABASE_URL KAFKA_BROKERS NODE_TOPOLOGY_CONSUMER_GROUP HTTP_ADDR \
+(( ${#vars[@]} == 12 )) || fail "found ${#vars[@]} env constants (${vars[*]}), want the 12 of docs/docs/operations/before-first-release.md row 8; the scan is looking in the wrong place or the binary changed"
+for var in DATABASE_URL MIGRATIONS_DATABASE_URL KAFKA_BROKERS NODE_TOPOLOGY_CONSUMER_GROUP SELLER_INBOUND_CONSUMER_GROUP HTTP_ADDR \
   OUTBOX_RELAY_INTERVAL OUTBOX_MAX_ATTEMPTS FEED_APPLY_CHUNK_SIZE RETENTION_INTERVAL SHUTDOWN_DRAIN_DELAY LOG_LEVEL; do
   [[ " ${vars[*]} " == *" $var "* ]] || fail "the binary no longer reads $var (update the chart and this test)"
 done
@@ -114,7 +116,9 @@ grep -q '^  KAFKA_BROKERS: "kafka.example.invalid:9092"' <<<"$configmap" || fail
 # Row 9: the consumer group id is a stable chart value, in both places.
 [[ "$(env_value "$deployment" NODE_TOPOLOGY_CONSUMER_GROUP)" == "$group" ]] || fail "NODE_TOPOLOGY_CONSUMER_GROUP is not rendered from config.nodeTopologyConsumerGroup"
 grep -q "^  NODE_TOPOLOGY_CONSUMER_GROUP: \"$group\"" <<<"$configmap" || fail "the ConfigMap does not carry NODE_TOPOLOGY_CONSUMER_GROUP"
-if grep -q 'NODE_TOPOLOGY_CONSUMER_GROUP' <<<"$(grep -B1 -A3 'fieldRef' <<<"$deployment")"; then
+[[ "$(env_value "$deployment" SELLER_INBOUND_CONSUMER_GROUP)" == "$seller_group" ]] || fail "SELLER_INBOUND_CONSUMER_GROUP is not rendered from config.sellerInboundConsumerGroup"
+grep -q "^  SELLER_INBOUND_CONSUMER_GROUP: \"$seller_group\"" <<<"$configmap" || fail "the ConfigMap does not carry SELLER_INBOUND_CONSUMER_GROUP"
+if grep -qE 'NODE_TOPOLOGY_CONSUMER_GROUP|SELLER_INBOUND_CONSUMER_GROUP' <<<"$(grep -B1 -A3 'fieldRef' <<<"$deployment")"; then
   fail "the consumer group must never be derived from the pod (fieldRef)"
 fi
 # A tuned config.* value reaches both the ConfigMap and the Deployment.
@@ -149,7 +153,7 @@ grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$deployment" | grep -q 'optional: 
 grep -A6 'name: MIGRATIONS_DATABASE_URL$' <<<"$deployment" | grep -q 'key: MIGRATIONS_DATABASE_URL' || fail "MIGRATIONS_DATABASE_URL must read database.migrationsExistingSecretKey"
 # An existing Secret is referenced and no Secret is created.
 existing="$(helm template "$release" "$chart_dir" --set database.existingSecret=my-db --set kafka.brokers=k:9092 \
-  --set "config.nodeTopologyConsumerGroup=$group")"
+  --set "config.nodeTopologyConsumerGroup=$group" --set "config.sellerInboundConsumerGroup=$seller_group")"
 grep -A4 'name: DATABASE_URL$' <<<"$existing" | grep -q 'name: my-db' || fail "database.existingSecret is not the DATABASE_URL secretKeyRef"
 if grep -q 'kind: Secret' <<<"$existing"; then fail "no Secret may be created when database.existingSecret is set"; fi
 grep -q 'kind: Secret' <<<"$render_all" || fail "database.url must render the Secret"
@@ -182,15 +186,20 @@ expect_ok() { # expect_ok <why> <helm args...>
   local why="$1"; shift
   helm template "$release" "$chart_dir" "$@" >/dev/null || fail "the chart must render: $why"
 }
-no_db=(--set kafka.brokers=k:9092 --set "config.nodeTopologyConsumerGroup=$group")
-no_kafka=(--set database.url=postgres://u@h/db --set "config.nodeTopologyConsumerGroup=$group")
-no_group=(--set database.url=postgres://u@h/db --set kafka.brokers=k:9092)
+groups=(--set "config.nodeTopologyConsumerGroup=$group" --set "config.sellerInboundConsumerGroup=$seller_group")
+no_db=(--set kafka.brokers=k:9092 "${groups[@]}")
+no_kafka=(--set database.url=postgres://u@h/db "${groups[@]}")
+no_group=(--set database.url=postgres://u@h/db --set kafka.brokers=k:9092 --set "config.sellerInboundConsumerGroup=$seller_group")
+no_seller_group=(--set database.url=postgres://u@h/db --set kafka.brokers=k:9092 --set "config.nodeTopologyConsumerGroup=$group")
 expect_refusal "no database source" "database.url or database.existingSecret" "${no_db[@]}"
 expect_refusal "no kafka.brokers" "kafka.brokers" "${no_kafka[@]}"
 expect_refusal "blank kafka.brokers" "kafka.brokers" "${no_kafka[@]}" --set 'kafka.brokers= \, '
 expect_refusal "no consumer group" "config.nodeTopologyConsumerGroup" "${no_group[@]}"
 expect_refusal "an empty consumer group" "NODE_TOPOLOGY_CONSUMER_GROUP" "${no_group[@]}" --set config.nodeTopologyConsumerGroup=
 expect_refusal "a blank consumer group" "config.nodeTopologyConsumerGroup" "${no_group[@]}" --set 'config.nodeTopologyConsumerGroup=   '
+expect_refusal "no seller-inbound consumer group" "config.sellerInboundConsumerGroup" "${no_seller_group[@]}"
+expect_refusal "an empty seller-inbound consumer group" "SELLER_INBOUND_CONSUMER_GROUP" "${no_seller_group[@]}" --set config.sellerInboundConsumerGroup=
+expect_refusal "a blank seller-inbound consumer group" "config.sellerInboundConsumerGroup" "${no_seller_group[@]}" --set 'config.sellerInboundConsumerGroup=   '
 expect_refusal "a *_MODE through extraEnv" "_MODE" "${base[@]}" --set 'extraEnv[0].name=NODE_TOPOLOGY_MODE' --set 'extraEnv[0].value=permissive'
 expect_refusal "any *_MODE through extraEnv" "extraEnv sets DEMAND_MODE" "${base[@]}" --set 'extraEnv[0].name=DEMAND_MODE' --set 'extraEnv[0].value=kafka'
 expect_refusal "a grace period under 30s" "terminationGracePeriodSeconds" "${base[@]}" --set terminationGracePeriodSeconds=29

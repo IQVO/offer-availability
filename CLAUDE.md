@@ -2,7 +2,7 @@
 
 harness-template: v4
 
-Retail network, bounded context Offer & Availability (Supporting, commerce tier). Owns CatalogItem, Listing and InventoryFeed and publishes them; consumes the four node-topology lifecycle events into a local node status view and calls no sibling.
+Retail network, bounded context Offer & Availability (Supporting, commerce tier). Owns CatalogItem, Listing and InventoryFeed and publishes them; consumes the four node-topology lifecycle events and seller-inbound's SellerSuspended/SellerReinstated into local node and seller status views (ADR 0013), creates sellers' listings from InboundShipmentReceived (ADR 0014) and calls no sibling.
 Design source of truth: IQVO/warehouse-docs `network/model/model.yaml` (context offer-availability). This service belongs to the retail network, not the warehouse-systems fleet.
 This project is a domain-driven design study, not associated with any company: never name a real company, brand or product in code, comments, ADRs, specs, tests or fixtures (README `## Disclaimer`).
 
@@ -12,13 +12,13 @@ This project is a domain-driven design study, not associated with any company: n
 Guides: `python3 scripts/harness/repo_lint.py`, `python3 scripts/harness/guide_lint.py` must stay clean. Never gate a commit on a piped command.
 
 ## Layout (hexagonal)
-`internal/domain/{shared,catalog,listing,feed,nodestatus}` pure Go; `internal/application/{ports (interfaces only),repository (filters),views,usecases,outbox}`;
-`internal/adapters/inbound/{http (chi),kafka (node-topology consumer + DLQ)}`; `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`; `internal/adapters/kafka/cloudevents` (the ONLY envelope builder/decoder);
+`internal/domain/{shared,catalog,listing,feed,nodestatus,sellerstatus}` pure Go; `internal/application/{ports (interfaces only),repository (filters),views,usecases,outbox}`;
+`internal/adapters/inbound/{http (chi),kafka (node-topology + seller-inbound consumers + DLQ)}`; `internal/adapters/outbound/{postgres,kafka,outbox,clock,ids,memory,repocontract}`; `internal/adapters/kafka/cloudevents` (the ONLY envelope builder/decoder);
 `internal/testing/{pgtest,kafkatest}` (testcontainers helpers); `cmd/api` (composition root, `run(ctx)`); `features/` (godog, never a .go file at the repo root). Migrations are embedded in `internal/adapters/outbound/postgres/migrations`.
 
 ## Runtime rule
-Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and `NODE_TOPOLOGY_CONSUMER_GROUP` are mandatory (boot error naming the variable, raised before the listener binds; `MIGRATIONS_DATABASE_URL` is an optional direct DSN, falls back to `DATABASE_URL`).
-Three loops are always on: the outbox relay (`OUTBOX_MAX_ATTEMPTS` default 20, 0 = unlimited; `OUTBOX_RELAY_INTERVAL` 1s), the node-topology consumer, the retention janitor (`RETENTION_INTERVAL` 1h); the process exits non-zero when one ends on its own.
+Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS`, `NODE_TOPOLOGY_CONSUMER_GROUP` and `SELLER_INBOUND_CONSUMER_GROUP` are mandatory (boot error naming the variable, raised before the listener binds; `MIGRATIONS_DATABASE_URL` is an optional direct DSN, falls back to `DATABASE_URL`).
+Four loops are always on: the outbox relay (`OUTBOX_MAX_ATTEMPTS` default 20, 0 = unlimited; `OUTBOX_RELAY_INTERVAL` 1s), the node-topology and seller-inbound consumers, the retention janitor (`RETENTION_INTERVAL` 1h); the process exits non-zero when one ends on its own.
 `/healthz` = liveness; `/readyz` = drain gate + Postgres ping + Kafka metadata request with an EMPTY non-nil topic list (fresh connection per check; it never needs the topic to exist).
 Shutdown: /readyz 503, `SHUTDOWN_DRAIN_DELAY` (5s), drain HTTP, stop the loops, close pool. cmd/** never imports internal/adapters/outbound/memory or repocontract. No authentication on REST. See docs/docs/overview/runtime.md.
 
@@ -30,7 +30,7 @@ A FAILED inventory feed answers 422 and is still stored (`keepWrites`, ADR 0005)
 ## Events: CloudEvents 1.0 is MANDATORY
 Published: type `com.retailnetwork.commerce.offer-availability.<entity>.<Event>` (entity: catalogitem, listing, inventoryfeed); source `/retailnetwork/offer-availability`; dataschema `urn:retailnetwork:offer-availability:events:<Event>:v1`;
 all seven events on `retailnetwork.offer-availability.events` (nothing analytics-only); subject and Kafka key = aggregate id; header `content-type: application/cloudevents+json; charset=UTF-8`.
-Consumed: `com.retailnetwork.logistics.node-topology.node.{NodeRegistered,NodeActivated,NodeSuspended,NodeRetired}` from `retailnetwork.node-topology.events`, inbox `processed_events`, DLQ `<topic>.dlq`, group from `NODE_TOPOLOGY_CONSUMER_GROUP` (never a literal).
+Consumed: `com.retailnetwork.logistics.node-topology.node.{NodeRegistered,NodeActivated,NodeSuspended,NodeRetired}` from `retailnetwork.node-topology.events`, and `com.retailnetwork.partner.seller-inbound.seller.{SellerSuspended,SellerReinstated}` + `...inboundshipment.InboundShipmentReceived` from `retailnetwork.seller-inbound.events` (other types counted, ADR 0013/0014); inbox `processed_events`, DLQ `<topic>.dlq`, groups from `NODE_TOPOLOGY_CONSUMER_GROUP` / `SELLER_INBOUND_CONSUMER_GROUP` (never a literal).
 Use internal/adapters/kafka/cloudevents only. Transactional outbox: aggregates + outbox rows in ONE Postgres transaction, id minted once at append, at-least-once delivery. No `warehouse.*` topic, ever.
 A new event: domain struct + apis/asyncapi.yaml + ADR 0004 `type:` line in the SAME commit + encoder payload + golden test (.claude/skills/how-to-add-an-integration-event).
 
@@ -40,7 +40,7 @@ A feed is ONE transaction across many listings (G23): a stale line is skipped an
 
 ## Workflow
 GitFlow: feature/* -> PR into develop, CI green before merge, never push develop or main. lefthook: pre-commit fmt/vet/lint, pre-push `make check`. Commit and push after each step.
-Deployment: `charts/offer-availability` (one `api` component; refuses to render without a database source, `kafka.brokers`, `config.nodeTopologyConsumerGroup`; tests in `charts/offer-availability/tests`, see docs/docs/overview/runtime.md). Open follow-up: repository secrets (docs/docs/operations/before-first-release.md row 11).
+Deployment: `charts/offer-availability` (one `api` component; refuses to render without a database source, `kafka.brokers`, `config.nodeTopologyConsumerGroup`, `config.sellerInboundConsumerGroup`; tests in `charts/offer-availability/tests`, see docs/docs/overview/runtime.md). Open follow-up: repository secrets (docs/docs/operations/before-first-release.md row 11).
 
 A2A: `cmd/a2a` (port 8093) is this context's read-only Agent2Agent agent, skills `check_availability` (read), `feed_outcome` (read), decided in `docs/adr/0010-a2a-inbound-adapter.md`; delegation only (facts stay CloudEvents on Kafka), unauthenticated like REST and MCP; rules in `.claude/rules/fleet/a2a.md`.
  Agent authority: every MCP tool and A2A skill declares a level (`com.warehouse/authority` _meta / `authority:L<n>` skill tag; L1 read, L2 recommend, L3 write - ADR 12); the MCP Streamable HTTP handler is stateless and answers the 2026-07-28 revision.

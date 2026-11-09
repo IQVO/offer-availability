@@ -15,7 +15,7 @@ func TestRepositoryContract(t *testing.T) {
 	repocontract.Run(t, func(t *testing.T) repocontract.Fixture {
 		s := memory.NewStore()
 		return repocontract.Fixture{
-			Catalog: s.Catalog(), Listings: s.Listings(), Feeds: s.Feeds(), Marks: s.Marks(), Nodes: s.Nodes(),
+			Catalog: s.Catalog(), Listings: s.Listings(), Feeds: s.Feeds(), Marks: s.Marks(), Nodes: s.Nodes(), Sellers: s.Sellers(),
 			Inbox: s.Inbox(), Outbox: s.Outbox(), UoW: s.UnitOfWork(),
 			OutboxCount: func(context.Context) (int, error) { return len(s.Outbox().Events()), nil },
 		}

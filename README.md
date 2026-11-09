@@ -43,7 +43,7 @@ view of this context is on the aggregator,
 
 - **Catalogue**: create a catalogue item (title, dimensions, weight, hazmat, fragile) and discontinue it; discontinuing suppresses every listing of the item.
 - **Identifiers and packaging**: an item may carry a GS1 `identifiers.gtin` and a packaging hierarchy `EACH < INNER < CASE < PALLET` (each level a GTIN with `unitsPerPack` in eaches, a child GTIN chain, optional dimensions and weight). The `unitsPerPack` of a GTIN never changes: a new count is a new GTIN and the old level is retired ([ADR 0006](docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md)).
-- **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE` or `DISCONTINUED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned.
+- **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE` or `DISCONTINUED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned. A seller's received inbound shipment (seller-inbound `InboundShipmentReceived`) creates the seller's listings of the received items at availability 0 (ADR 0014).
 - **Inventory feeds**: a vendor sends the quantity a node can ship for its listings, with the basis it gave (`PHYSICAL`, `THROUGHPUT_CONSTRAINED`).
   A feed is applied in one transaction; a stale line is skipped and counted, an older feed is `SUPERSEDED`, a broken line makes the feed `FAILED`
   (recorded, and it may be sent again), and a full feed zeroes the listings it omits.
@@ -105,13 +105,14 @@ Consumed from `retailnetwork.node-topology.events` ([ADR 0003](docs/adr/0003-con
 
 ## Running it
 
-Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and `NODE_TOPOLOGY_CONSUMER_GROUP` are mandatory (a boot error names the missing
-variable); the embedded migrations run at boot and the outbox relay, the consumer and the retention janitor are always on.
+Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS`, `NODE_TOPOLOGY_CONSUMER_GROUP` and `SELLER_INBOUND_CONSUMER_GROUP` are mandatory (a boot error names the missing
+variable); the embedded migrations run at boot and the outbox relay, the two consumers and the retention janitor are always on.
 
 ```sh
 export DATABASE_URL=postgres://user:***@localhost:5432/offer_availability?sslmode=disable
 export KAFKA_BROKERS=localhost:29092                   # whatever your broker advertises
 export NODE_TOPOLOGY_CONSUMER_GROUP=offer-availability-local
+export SELLER_INBOUND_CONSUMER_GROUP=offer-availability-seller-local
 go run ./cmd/api                                       # listens on :8080 (HTTP_ADDR)
 ```
 
@@ -127,6 +128,7 @@ All settings, the probes, the shutdown order and the outbox runbook: [Configurat
 | `MIGRATIONS_DATABASE_URL` | `DATABASE_URL` | Direct DSN for the boot migrations |
 | `KAFKA_BROKERS` | **required** | Comma-separated `host:port` list; unset ⇒ boot error |
 | `NODE_TOPOLOGY_CONSUMER_GROUP` | **required** | Stable node-topology consumer group id, never defaulted (a local run cannot silently join a live cluster's group) |
+| `SELLER_INBOUND_CONSUMER_GROUP` | **required** | Stable seller-inbound consumer group id (`retailnetwork.seller-inbound.events`, ADR 0013), never defaulted |
 | `HTTP_ADDR` | `:8080` | Listen address |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | Relay sleep between passes (Go duration or plain seconds) |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | Outbox attempt cap before a row is excluded from the relay |

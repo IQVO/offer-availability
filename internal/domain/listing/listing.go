@@ -66,17 +66,37 @@ const (
 // Valid reports whether s is one of the model's states.
 func (s State) Valid() bool { return s == StateLive || s == StateSuppressed }
 
-// Reason says why a listing is SUPPRESSED (ADR 0002, A4 and A14).
+// Reason says why a listing is SUPPRESSED (ADR 0002, A4 and A14; ADR 0013).
 type Reason string
 
-// The suppression reasons. DISCONTINUED is final.
+// The suppression reasons. DISCONTINUED is final. Precedence (ADR 0013, rule 3):
+// DISCONTINUED > NODE_NOT_SELLABLE > OWNER_SUSPENDED; a listing shows the
+// highest active cause.
 const (
 	ReasonNodeNotSellable Reason = "NODE_NOT_SELLABLE"
 	ReasonDiscontinued    Reason = "DISCONTINUED"
+	ReasonOwnerSuspended  Reason = "OWNER_SUSPENDED"
 )
 
 // Valid reports whether r is a suppression reason.
-func (r Reason) Valid() bool { return r == ReasonNodeNotSellable || r == ReasonDiscontinued }
+func (r Reason) Valid() bool { return r.rank() > 0 }
+
+// rank orders the reasons by precedence; 0 is no (or an unknown) reason.
+func (r Reason) rank() int {
+	if r == ReasonDiscontinued {
+		return 3
+	}
+	if r == ReasonNodeNotSellable {
+		return 2
+	}
+	if r == ReasonOwnerSuspended {
+		return 1
+	}
+	return 0
+}
+
+// Outranks reports whether r takes precedence over other (ADR 0013, rule 3).
+func (r Reason) Outranks(other Reason) bool { return r.rank() > other.rank() }
 
 // Basis is why the node gave the quantity, kept as the vendor declared it.
 type Basis string
@@ -102,12 +122,31 @@ type Availability struct {
 	FeedID string
 }
 
-// Sellability is what the use case read about the neighbours of a new listing.
+// Sellability is what the use case read about the three causes that can keep a
+// listing off the shelf: its node, its item and its owner.
 type Sellability struct {
 	// NodeActive is true only when the local NodeStatusView says ACTIVE.
 	NodeActive bool
 	// ItemDiscontinued is true when the catalogue item is DISCONTINUED.
 	ItemDiscontinued bool
+	// OwnerSuspended is true when the local SellerStatusView of the listing's
+	// owner says SUSPENDED; always false for an operator-owned listing.
+	OwnerSuspended bool
+}
+
+// Cause returns the highest active cause by precedence (ADR 0013, rule 3), or
+// "" when the listing may be LIVE.
+func (s Sellability) Cause() Reason {
+	if s.ItemDiscontinued {
+		return ReasonDiscontinued
+	}
+	if !s.NodeActive {
+		return ReasonNodeNotSellable
+	}
+	if s.OwnerSuspended {
+		return ReasonOwnerSuspended
+	}
+	return ""
 }
 
 // Listing is the aggregate root.
@@ -139,9 +178,9 @@ type Snapshot struct {
 }
 
 // Create builds a listing (aggregate version 1) and raises ListingCreated. It
-// starts LIVE only when the node is ACTIVE and the item is not discontinued;
-// otherwise it starts SUPPRESSED, DISCONTINUED winning over NODE_NOT_SELLABLE,
-// and also raises ListingSuppressed (A5, A6).
+// starts LIVE only when the node is ACTIVE, the item is not discontinued and the
+// owner is not suspended; otherwise it starts SUPPRESSED with the highest cause
+// (Sellability.Cause) and also raises ListingSuppressed (A5, A6, ADR 0013).
 func Create(id ID, item ItemID, node NodeID, s Sellability, now time.Time) (*Listing, []shared.Event, error) {
 	return CreateOwned(id, item, node, "", s, now)
 }
@@ -169,14 +208,11 @@ func CreateOwned(id ID, item ItemID, node NodeID, owner OwnerRef, s Sellability,
 		Header:    shared.Header{Version: 1, At: at},
 		ListingID: id, CatalogItemID: item, NodeID: node, OwnerRef: owner,
 	}}
-	switch {
-	case s.ItemDiscontinued:
-		l.state, l.reason = StateSuppressed, ReasonDiscontinued
-	case !s.NodeActive:
-		l.state, l.reason = StateSuppressed, ReasonNodeNotSellable
-	default:
+	cause := s.Cause()
+	if cause == "" {
 		return l, events, nil
 	}
+	l.state, l.reason = StateSuppressed, cause
 	events = append(events, ListingSuppressed{Header: shared.Header{Version: 1, At: at}, ListingID: id, NodeID: node, Reason: l.reason})
 	return l, events, nil
 }
@@ -222,15 +258,16 @@ func (l *Listing) ZeroOut(asOf time.Time, feedID string, now time.Time) ([]share
 }
 
 // Suppress moves LIVE -> SUPPRESSED with the reason and raises
-// ListingSuppressed. A listing suppressed for NODE_NOT_SELLABLE may be
-// suppressed again for DISCONTINUED (the reason changes, A4); every other
-// suppression of a SUPPRESSED listing is ErrIllegalTransition.
+// ListingSuppressed. A SUPPRESSED listing may be suppressed again for a reason
+// that outranks its current one (the reason changes: OWNER_SUSPENDED ->
+// NODE_NOT_SELLABLE -> DISCONTINUED, A4 and ADR 0013); every other suppression
+// of a SUPPRESSED listing is ErrIllegalTransition, so a listing keeps a
+// higher-precedence reason.
 func (l *Listing) Suppress(reason Reason, now time.Time) ([]shared.Event, error) {
 	if !reason.Valid() {
 		return nil, shared.Invalid("suppression reason %q is unknown", reason)
 	}
-	upgrade := l.state == StateSuppressed && l.reason == ReasonNodeNotSellable && reason == ReasonDiscontinued
-	if l.state == StateSuppressed && !upgrade {
+	if l.state == StateSuppressed && !reason.Outranks(l.reason) {
 		return nil, fmt.Errorf("%w: listing %s is already SUPPRESSED (%s)", shared.ErrIllegalTransition, l.id, l.reason)
 	}
 	l.state, l.reason = StateSuppressed, reason
@@ -243,7 +280,8 @@ func (l *Listing) Suppress(reason Reason, now time.Time) ([]shared.Event, error)
 
 // Restore moves SUPPRESSED -> LIVE and raises ListingRestored. Check order: the
 // listing is SUPPRESSED, its reason is not DISCONTINUED (both
-// ErrIllegalTransition), then the node is sellable (ErrNodeNotSellable).
+// ErrIllegalTransition), then the node is sellable (ErrNodeNotSellable). It
+// does not know the owner: the policies use Reconcile, which does.
 func (l *Listing) Restore(nodeSellable bool, now time.Time) ([]shared.Event, error) {
 	if l.state != StateSuppressed {
 		return nil, fmt.Errorf("%w: listing %s is not SUPPRESSED", shared.ErrIllegalTransition, l.id)
@@ -260,6 +298,39 @@ func (l *Listing) Restore(nodeSellable bool, now time.Time) ([]shared.Event, err
 		Header:    shared.Header{Version: l.version, At: shared.UTC(now)},
 		ListingID: l.id, NodeID: l.node,
 	}}, nil
+}
+
+// Reconcile moves the listing to the highest active cause of s (ADR 0013): LIVE
+// when no cause holds (ListingRestored), otherwise SUPPRESSED with that reason
+// (ListingSuppressed whenever the state or the reason changes, a lower reason
+// included, so a cleared higher cause hands over to the remaining one). A
+// listing already where s puts it, and a DISCONTINUED one (final), are left
+// untouched: nil events, nil error.
+func (l *Listing) Reconcile(s Sellability, now time.Time) []shared.Event {
+	if l.reason == ReasonDiscontinued {
+		return nil
+	}
+	cause := s.Cause()
+	if cause == "" {
+		if l.state == StateLive {
+			return nil
+		}
+		l.state, l.reason = StateLive, ""
+		l.version++
+		return []shared.Event{ListingRestored{
+			Header:    shared.Header{Version: l.version, At: shared.UTC(now)},
+			ListingID: l.id, NodeID: l.node,
+		}}
+	}
+	if l.state == StateSuppressed && l.reason == cause {
+		return nil
+	}
+	l.state, l.reason = StateSuppressed, cause
+	l.version++
+	return []shared.Event{ListingSuppressed{
+		Header:    shared.Header{Version: l.version, At: shared.UTC(now)},
+		ListingID: l.id, NodeID: l.node, Reason: cause,
+	}}
 }
 
 // Restore rebuilds a persisted listing, validating every invariant.

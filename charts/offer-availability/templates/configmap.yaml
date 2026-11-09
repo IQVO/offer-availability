@@ -16,6 +16,7 @@ data:
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   KAFKA_BROKERS: {{ .Values.kafka.brokers | quote }}
   NODE_TOPOLOGY_CONSUMER_GROUP: {{ .Values.config.nodeTopologyConsumerGroup | quote }}
+  SELLER_INBOUND_CONSUMER_GROUP: {{ .Values.config.sellerInboundConsumerGroup | quote }}
   OUTBOX_RELAY_INTERVAL: {{ .Values.config.outboxRelayInterval | quote }}
   OUTBOX_MAX_ATTEMPTS: {{ .Values.config.outboxMaxAttempts | quote }}
   FEED_APPLY_CHUNK_SIZE: {{ .Values.config.feedApplyChunkSize | quote }}

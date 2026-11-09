@@ -20,6 +20,8 @@ info:
       description: Events raised by the InventoryFeed aggregate.
     - name: node-topology
       description: Events consumed from the node-topology bounded context.
+    - name: seller-inbound
+      description: Events consumed from the seller-inbound bounded context.
   description: |
     Event catalog for the **offer-availability** bounded context of the retail
     network (commerce tier): the network's catalogue items, one listing per
@@ -43,6 +45,15 @@ info:
     drive the SuppressOnNodeUnavailable policy (ADR 0003). The consumer
     dispatches on the full `type`, ignores every other type, tolerates unknown
     fields, and dedupes on the CloudEvents `id` (inbox table `processed_events`).
+    Two seller-inbound events (`SellerSuspended`, `SellerReinstated`) from
+    `retailnetwork.seller-inbound.events`, in the consumer group given by the
+    mandatory `SELLER_INBOUND_CONSUMER_GROUP`, feed the local SellerStatusView
+    and suppress or restore the listings the seller owns (reason
+    OWNER_SUSPENDED, ADR 0013). `InboundShipmentReceived` on the same topic
+    creates the seller's listings of the received stock (ADR 0014). Every other
+    type on that topic is acknowledged and counted
+    (`availability.seller_events.ignored`, reason `type_not_consumed`), never
+    applied.
 
     **Analytics.** The model names no analytics-only event for this context, so
     nothing is published on `retailnetwork.offer-availability.analytics`.
@@ -119,6 +130,24 @@ channels:
         $ref: "#/components/messages/NodeSuspended"
       NodeRetired:
         $ref: "#/components/messages/NodeRetired"
+  sellerInboundEvents:
+    address: retailnetwork.seller-inbound.events
+    title: seller-inbound integration topic (consumed)
+    description: |
+      Owned by seller-inbound; consumed here (ADR 0013). Key = the aggregate
+      root id (sellerId for the two seller types below, shipmentId for
+      InboundShipmentReceived), so one seller's status events arrive in order on
+      one partition. The two seller status types and InboundShipmentReceived
+      (ADR 0014) are used; every other type on the topic (the other inbound
+      shipment events, the placement suggestion, any future type) is
+      acknowledged, counted and ignored.
+    messages:
+      SellerSuspended:
+        $ref: "#/components/messages/SellerSuspended"
+      SellerReinstated:
+        $ref: "#/components/messages/SellerReinstated"
+      InboundShipmentReceived:
+        $ref: "#/components/messages/InboundShipmentReceived"
 
 operations:
   publishOfferAvailabilityEvents:
@@ -176,6 +205,68 @@ operations:
       - $ref: "#/channels/nodeTopologyEvents/messages/NodeActivated"
       - $ref: "#/channels/nodeTopologyEvents/messages/NodeSuspended"
       - $ref: "#/channels/nodeTopologyEvents/messages/NodeRetired"
+  receiveSellerInboundEvents:
+    action: receive
+    title: Receive seller-inbound seller status events
+    summary: Fold seller status into SellerStatusView and suppress or restore the seller's listings.
+    description: |
+      Consumed from `retailnetwork.seller-inbound.events` in the group named by
+      SELLER_INBOUND_CONSUMER_GROUP (ADR 0013). SellerSuspended sets the seller
+      SUSPENDED at `suspendedAt` and suppresses every LIVE listing whose ownerRef
+      is the sellerId with reason OWNER_SUSPENDED (a listing already SUPPRESSED
+      keeps its higher reason). SellerReinstated sets it ACTIVE at
+      `reinstatedAt` and restores every listing of the seller suppressed for
+      OWNER_SUSPENDED, unless its node is not sellable or its item is
+      discontinued, in which case the reason switches to that cause (one
+      ListingSuppressed). An event older than the stored `asOf` is ignored; an
+      unknown seller is ACTIVE. The fields read are exactly the ones in the
+      payload schemas below. Each CloudEvents id is recorded in
+      `processed_events` in the same transaction as its effects.
+
+      Failure handling mirrors the node-topology consumer: not a CloudEvent =
+      logged and skipped; another type of the topic = counted and skipped; a
+      seller type with an undecodable `data`, a missing `sellerId` or instant, or
+      a value the use case refuses is dead-lettered at once to
+      `retailnetwork.seller-inbound.events.dlq`; any other failure is tried 5
+      times in all, then dead-lettered.
+    tags:
+      - name: seller-inbound
+    channel:
+      $ref: "#/channels/sellerInboundEvents"
+    messages:
+      - $ref: "#/channels/sellerInboundEvents/messages/SellerSuspended"
+      - $ref: "#/channels/sellerInboundEvents/messages/SellerReinstated"
+  receiveSellerInboundReceivedStock:
+    action: receive
+    title: Receive seller-inbound received shipments
+    summary: Create the seller's listings of the stock an inbound shipment received.
+    description: |
+      Consumed from `retailnetwork.seller-inbound.events` by the same consumer
+      and group as the seller status events (ADR 0014, building ADR 0013 rule
+      8). For each `received` line with `qtyEaches` > 0 the item is the line's
+      `catalogItemId`, or else the catalogue item holding its `gtin` (an item
+      GTIN or any pack level GTIN, retired levels included). Each resolved item
+      without a listing of (item, `nodeId`, ownerRef = `sellerId`) gets one:
+      ListingCreated (availability 0, basis UNKNOWN), then ListingSuppressed when
+      the node is not sellable, the item is discontinued or the owner is
+      SUSPENDED. An existing listing is not touched; availability comes only
+      from the vendor's inventory feed. One transaction per event, the
+      CloudEvents id recorded in `processed_events`.
+
+      Skips are acknowledged and counted in `availability.seller_events.ignored`
+      (attribute `reason`), never errors: an event without `received`
+      (published before the producer carried it) creates nothing
+      (`received_unknown`); a line whose GTIN no item holds is logged at WARN
+      (`gtin_unresolved`); a line whose `catalogItemId` the catalogue does not
+      hold likewise (`item_unknown`). An undecodable `data`, or one without
+      `sellerId` or `nodeId`, is dead-lettered to
+      `retailnetwork.seller-inbound.events.dlq`.
+    tags:
+      - name: seller-inbound
+    channel:
+      $ref: "#/channels/sellerInboundEvents"
+    messages:
+      - $ref: "#/channels/sellerInboundEvents/messages/InboundShipmentReceived"
 
 components:
   messages:
@@ -357,7 +448,7 @@ components:
       name: ListingSuppressed
       title: Listing suppressed
       summary: A listing stopped being sellable.
-      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed`; subject and key = the listingId. Raised by SuppressListing: on NodeSuspended/NodeRetired (reason NODE_NOT_SELLABLE), on creation for a node that is not sellable (NODE_NOT_SELLABLE) or a discontinued item (DISCONTINUED), and on DiscontinueItem (DISCONTINUED). A listing suppressed for NODE_NOT_SELLABLE that is then suppressed for DISCONTINUED raises a second ListingSuppressed with the new reason. DISCONTINUED is final."
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed`; subject and key = the listingId. Raised by SuppressListing: on NodeSuspended/NodeRetired (reason NODE_NOT_SELLABLE), on SellerSuspended for the seller's LIVE listings (OWNER_SUSPENDED), on creation for a node that is not sellable (NODE_NOT_SELLABLE), a discontinued item (DISCONTINUED) or a suspended owner (OWNER_SUSPENDED), and on DiscontinueItem (DISCONTINUED). `reason` is the highest active cause, by precedence DISCONTINUED > NODE_NOT_SELLABLE > OWNER_SUSPENDED (ADR 0013): whenever it changes (a higher cause arrives, or a cleared higher cause hands over to a remaining lower one, for example NodeActivated while the owner is still suspended) a second ListingSuppressed carries the new reason. DISCONTINUED is final."
       contentType: application/cloudevents+json
       tags:
         - name: listing
@@ -384,7 +475,7 @@ components:
       name: ListingRestored
       title: Listing restored
       summary: A suppressed listing became LIVE again.
-      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingRestored`; subject and key = the listingId. Raised by RestoreListing when the node became ACTIVE again and the listing had been suppressed for NODE_NOT_SELLABLE. A listing suppressed for DISCONTINUED is never restored."
+      description: "`type` = `com.retailnetwork.commerce.offer-availability.listing.ListingRestored`; subject and key = the listingId. Raised by RestoreListing when the last cause cleared: the node became ACTIVE again (NODE_NOT_SELLABLE) or the owner was reinstated (OWNER_SUSPENDED), and no other cause holds. A listing suppressed for DISCONTINUED is never restored."
       contentType: application/cloudevents+json
       tags:
         - name: listing
@@ -465,7 +556,7 @@ components:
       name: NodeActivated
       title: Node activated (consumed)
       summary: node-topology activated a node.
-      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeActivated`. Sets the node ACTIVE in NodeStatusView at `activatedAt`, then restores every listing of the node suppressed for NODE_NOT_SELLABLE (one ListingRestored each)."
+      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeActivated`. Sets the node ACTIVE in NodeStatusView at `activatedAt`, then restores every listing of the node suppressed for NODE_NOT_SELLABLE (one ListingRestored each), except a listing whose owner is SUSPENDED in SellerStatusView: its reason switches to OWNER_SUSPENDED (one ListingSuppressed, ADR 0013)."
       contentType: application/cloudevents+json
       tags:
         - name: node-topology
@@ -491,7 +582,7 @@ components:
       name: NodeSuspended
       title: Node suspended (consumed)
       summary: node-topology suspended a node.
-      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeSuspended`. Sets the node SUSPENDED in NodeStatusView at `suspendedAt`, then suppresses every LIVE listing of the node (reason NODE_NOT_SELLABLE, one ListingSuppressed each)."
+      description: "Consumed. `type` = `com.retailnetwork.logistics.node-topology.node.NodeSuspended`. Sets the node SUSPENDED in NodeStatusView at `suspendedAt`, then suppresses every LIVE listing of the node and every listing suppressed for OWNER_SUSPENDED (reason NODE_NOT_SELLABLE, the higher cause; one ListingSuppressed each)."
       contentType: application/cloudevents+json
       tags:
         - name: node-topology
@@ -539,6 +630,96 @@ components:
               nodeId: "node-0f3a91"
               retiredAt: "2026-10-23T18:00:00Z"
 
+    SellerSuspended:
+      name: SellerSuspended
+      title: Seller suspended (consumed)
+      summary: seller-inbound suspended a seller.
+      description: "Consumed. `type` = `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended`. Sets the seller SUSPENDED in SellerStatusView at `suspendedAt` (an older event is ignored), then suppresses every LIVE listing whose ownerRef is `sellerId` (reason OWNER_SUSPENDED, one ListingSuppressed each). A listing already SUPPRESSED keeps its higher reason."
+      contentType: application/cloudevents+json
+      tags:
+        - name: seller-inbound
+      payload:
+        $ref: "#/components/schemas/SellerSuspendedIn"
+      examples:
+        - name: sellerSuspended
+          summary: A seller was suspended.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1ca2"
+            source: "/retailnetwork/seller-inbound"
+            type: "com.retailnetwork.partner.seller-inbound.seller.SellerSuspended"
+            subject: "seller-77"
+            time: "2026-10-24T13:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:seller-inbound:events:SellerSuspended:v1"
+            data:
+              sellerId: "seller-77"
+              suspendedAt: "2026-10-24T13:00:00Z"
+
+    SellerReinstated:
+      name: SellerReinstated
+      title: Seller reinstated (consumed)
+      summary: seller-inbound reinstated a suspended seller.
+      description: "Consumed. `type` = `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated`. Sets the seller ACTIVE in SellerStatusView at `reinstatedAt` (an older event is ignored), then restores every listing of the seller suppressed for OWNER_SUSPENDED (one ListingRestored each), unless its node is not sellable or its item discontinued: then the reason switches to that cause (one ListingSuppressed)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: seller-inbound
+      payload:
+        $ref: "#/components/schemas/SellerReinstatedIn"
+      examples:
+        - name: sellerReinstated
+          summary: A seller was reinstated.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1ca3"
+            source: "/retailnetwork/seller-inbound"
+            type: "com.retailnetwork.partner.seller-inbound.seller.SellerReinstated"
+            subject: "seller-77"
+            time: "2026-10-25T09:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:seller-inbound:events:SellerReinstated:v1"
+            data:
+              sellerId: "seller-77"
+              reinstatedAt: "2026-10-25T09:00:00Z"
+
+    InboundShipmentReceived:
+      name: InboundShipmentReceived
+      title: Inbound shipment received (consumed)
+      summary: seller-inbound closed the receipt of an inbound shipment.
+      description: "Consumed. `type` = `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived`. Creates, for each received item that has no listing of (item, `nodeId`, ownerRef = `sellerId`), the seller's listing (ListingCreated, availability 0 / UNKNOWN; ListingSuppressed when a cause holds). Lines resolve by `catalogItemId`, else by `gtin` through the catalogue's GTIN/packaging index; unresolvable lines and events without `received` are counted, never errors (ADR 0014)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: seller-inbound
+      payload:
+        $ref: "#/components/schemas/InboundShipmentReceivedIn"
+      examples:
+        - name: inboundShipmentReceived
+          summary: A shipment received one resolved and one GTIN-only line.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1ca4"
+            source: "/retailnetwork/seller-inbound"
+            type: "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived"
+            subject: "shp-1"
+            time: "2026-10-24T12:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:seller-inbound:events:InboundShipmentReceived:v1"
+            data:
+              shipmentId: "shp-1"
+              sellerId: "S-1"
+              nodeId: "n-1"
+              status: "CLOSED"
+              cartons:
+                - sscc: "006141410000000012"
+                  status: "RECEIVED"
+              receivedAt: "2026-10-24T12:00:00Z"
+              received:
+                - catalogItemId: "item-1"
+                  gtin: "00614141000012"
+                  qtyEaches: 24
+                - gtin: "00614141000036"
+                  qtyEaches: 6
+
   schemas:
     CloudEventEnvelope:
       type: object
@@ -560,7 +741,8 @@ components:
 
     SuppressionReason:
       type: string
-      enum: [NODE_NOT_SELLABLE, DISCONTINUED]
+      description: The highest active cause, by precedence DISCONTINUED > NODE_NOT_SELLABLE > OWNER_SUSPENDED (ADR 0013).
+      enum: [NODE_NOT_SELLABLE, DISCONTINUED, OWNER_SUSPENDED]
 
     CatalogItemCreatedEvent:
       allOf:
@@ -757,3 +939,56 @@ components:
           properties:
             nodeId: { type: string }
             retiredAt: { type: string, format: date-time }
+
+    SellerSuspendedIn:
+      type: object
+      description: Tolerant copy of the seller-inbound SellerSuspended envelope; only the fields read are declared (the producer's optional `reason` is not read).
+      required: [id, type, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.partner.seller-inbound.seller.SellerSuspended }
+        data:
+          type: object
+          required: [sellerId, suspendedAt]
+          properties:
+            sellerId: { type: string }
+            suspendedAt: { type: string, format: date-time }
+
+    SellerReinstatedIn:
+      type: object
+      description: Tolerant copy of the seller-inbound SellerReinstated envelope; only the fields read are declared.
+      required: [id, type, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.partner.seller-inbound.seller.SellerReinstated }
+        data:
+          type: object
+          required: [sellerId, reinstatedAt]
+          properties:
+            sellerId: { type: string }
+            reinstatedAt: { type: string, format: date-time }
+
+    InboundShipmentReceivedIn:
+      type: object
+      description: Tolerant copy of the seller-inbound InboundShipmentReceived envelope (seller-inbound ADR 0014); only the fields read are declared. `status`, `cartons` and `receivedAt` are not read.
+      required: [id, type, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived }
+        data:
+          type: object
+          required: [sellerId, nodeId]
+          properties:
+            shipmentId: { type: string, description: Logged only. }
+            sellerId: { type: string, description: The ownerRef of the listings created. }
+            nodeId: { type: string }
+            received:
+              type: array
+              description: The stock received per item, sorted by gtin, zero lines omitted. Absent on events published before seller-inbound ADR 0014, which create nothing (counted received_unknown).
+              items:
+                type: object
+                required: [gtin, qtyEaches]
+                properties:
+                  catalogItemId: { type: string, description: Omitted when the producer could not resolve it; the line then resolves by gtin. }
+                  gtin: { type: string, pattern: "^[0-9]{14}$", description: The EACH GTIN when the producer resolved it, otherwise the carton GTIN. }
+                  qtyEaches: { type: integer, minimum: 1, description: A line is used when > 0; the quantity is never applied as availability. }

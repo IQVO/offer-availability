@@ -61,6 +61,11 @@ func run(ctx context.Context) error {
 		return err
 	}
 	ad.deps.Metrics = feedMetrics
+	sellerMetrics, err := telemetry.NewSellerEventMetrics()
+	if err != nil {
+		return err
+	}
+	ad.deps.ReceivedMetrics = sellerMetrics
 	ad.deps.FeedChunkSize = cfg.feedChunkSize
 
 	readiness := newReadiness(ad.pool.Ping, cfg.brokers)
@@ -72,9 +77,10 @@ func run(ctx context.Context) error {
 
 	relay, stopRelay := startOutboxRelay(ad.outbox, cfg, logger)
 	consumer, stopConsumer := startNodeConsumer(usecases.NewApplyNodeEvent(ad.deps), cfg, logger)
+	sellers, stopSellers := startSellerConsumer(usecases.NewApplySellerEvent(ad.deps), usecases.NewApplyReceivedStock(ad.deps), sellerMetrics, cfg, logger)
 	janitor, stopJanitor := startJanitor(ad.retention, cfg, logger)
-	workers := []*worker{relay, consumer, janitor}
-	stops := []func(){stopRelay, stopConsumer, stopJanitor}
+	workers := []*worker{relay, consumer, sellers, janitor}
+	stops := []func(){stopRelay, stopConsumer, stopSellers, stopJanitor}
 	return serveUntilSignal(ctx, logger, httpServer, readiness, cfg.drainDelay, workers, stops)
 }
 
@@ -124,7 +130,7 @@ func postgresAdapters(pool *pgxpool.Pool) adapters {
 	outbox := postgres.NewOutboxRepo(pool)
 	return adapters{pool: pool, outbox: outbox, retention: postgres.NewRetention(pool), deps: usecases.Deps{
 		Catalog: postgres.NewCatalogRepo(pool), Listings: postgres.NewListingRepo(pool), Feeds: postgres.NewFeedRepo(pool),
-		Marks: postgres.NewNodeFeedMarks(pool), Nodes: postgres.NewNodeStatusRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
+		Marks: postgres.NewNodeFeedMarks(pool), Nodes: postgres.NewNodeStatusRepo(pool), Sellers: postgres.NewSellerStatusRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
 		Outbox: postgres.NewEventOutbox(outbox, outboundkafka.NewEncoder()), UoW: postgres.NewUnitOfWork(pool),
 		Clock: clock.System{}, IDs: ids.UUID{},
 	}}
@@ -154,7 +160,7 @@ func buildServer(ad adapters, readiness *inboundhttp.Readiness, logger *slog.Log
 // serveUntilSignal runs httpServer until SIGINT/SIGTERM, ctx cancellation or a
 // listen error, then shuts down in the fleet order: (1) /readyz flips to 503,
 // (2) wait the drain delay, (3) drain HTTP, (4) stop and await the workers
-// (relay, consumer, janitor) LAST, so nothing committed above is stranded; the
+// (relay, consumers, janitor) LAST, so nothing committed above is stranded; the
 // caller's deferred pool.Close runs after all of it. When a worker returns on its
 // own the service cannot run: it exits non-zero so the orchestrator restarts it.
 func serveUntilSignal(ctx context.Context, logger *slog.Logger, httpServer *http.Server, readiness *inboundhttp.Readiness,

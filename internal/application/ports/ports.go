@@ -19,6 +19,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
+	"github.com/claudioed/offer-availability/internal/domain/sellerstatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
 	"github.com/claudioed/offer-availability/internal/domain/shared/gs1"
 )
@@ -57,6 +58,9 @@ type ListingRepository interface {
 	ListByNode(ctx context.Context, node listing.NodeID) ([]*listing.Listing, error)
 	// ListByItem returns every listing of the item ordered by id ascending.
 	ListByItem(ctx context.Context, item listing.ItemID) ([]*listing.Listing, error)
+	// ListByOwner returns every listing whose ownerRef is owner ordered by id
+	// ascending. The empty owner (operator-owned) is never asked for.
+	ListByOwner(ctx context.Context, owner listing.OwnerRef) ([]*listing.Listing, error)
 	// List returns the listings matching filter on the page, ordered by id
 	// ascending; no match is an empty list, never an error.
 	List(ctx context.Context, filter repository.ListingFilter, page repository.Page) ([]*listing.Listing, error)
@@ -94,6 +98,15 @@ type NodeStatusRepository interface {
 	Get(ctx context.Context, id nodestatus.ID) (*nodestatus.View, error)
 	// Save persists the view under the concurrency rule of the package comment.
 	Save(ctx context.Context, v *nodestatus.View) error
+}
+
+// SellerStatusRepository persists the SellerStatusView read model (ADR 0013).
+type SellerStatusRepository interface {
+	// Get returns the view of the seller, or ErrNotFound (an unknown seller is
+	// ACTIVE).
+	Get(ctx context.Context, id sellerstatus.ID) (*sellerstatus.View, error)
+	// Save persists the view under the concurrency rule of the package comment.
+	Save(ctx context.Context, v *sellerstatus.View) error
 }
 
 // ProcessedEvents is the consumer inbox: the CloudEvents ids already handled.
@@ -169,4 +182,23 @@ type FeedMetrics interface {
 	FeedSuperseded(ctx context.Context)
 	FeedFailed(ctx context.Context, reason string)
 	FeedRejected(ctx context.Context, reason string)
+}
+
+// ReceivedStockMetrics counts what ApplyReceivedStock acknowledged without
+// effect (ADR 0014), on the counter availability.seller_events.ignored by full
+// CloudEvents type and reason. The use case calls it once per skip, after its
+// unit of work committed (a retried attempt or a redelivered id never counts
+// twice):
+//
+//   - "received_unknown": the event carries no `received` list (published
+//     before the producer added it), one per event;
+//   - "gtin_unresolved": one received line without catalogItemId whose GTIN no
+//     catalogue item holds;
+//   - "item_unknown": one received line whose catalogItemId the catalogue does
+//     not hold.
+//
+// The implementation lives in internal/adapters/outbound/telemetry; a nil
+// Deps.ReceivedMetrics records nothing.
+type ReceivedStockMetrics interface {
+	ReceivedSkipped(ctx context.Context, eventType, reason string)
 }

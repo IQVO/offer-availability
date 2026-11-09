@@ -287,7 +287,7 @@ func (d Deps) registerTools(server *mcp.Server) {
 		Name: "list_listings",
 		Description: "List which nodes sell what, one keyset page at a time (listingId ascending), optionally narrowed " +
 			"to one node (nodeId) and/or one catalogue item (catalogItemId). Each listing says whether it is LIVE or " +
-			"SUPPRESSED (with the reason: NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when the listing is owned by " +
+			"SUPPRESSED (with the highest reason: DISCONTINUED, NODE_NOT_SELLABLE or OWNER_SUSPENDED), its ownerRef when the listing is owned by " +
 			"a seller, and the availability a vendor's feed last gave it (availableQty, the vendor's basis, asOf and " +
 			"the feedId). Pass the returned nextCursor as after to get the next page. Read-only; a bad limit fails " +
 			"with validation-failed.",

@@ -84,7 +84,7 @@ func newStatelessServer(t *testing.T) string {
 	t.Helper()
 	s := memory.NewStore()
 	d := usecases.Deps{
-		Catalog: s.Catalog(), Listings: s.Listings(), Feeds: s.Feeds(), Marks: s.Marks(), Nodes: s.Nodes(),
+		Catalog: s.Catalog(), Listings: s.Listings(), Feeds: s.Feeds(), Marks: s.Marks(), Nodes: s.Nodes(), Sellers: s.Sellers(),
 		Inbox: s.Inbox(), Outbox: s.Outbox(), UoW: s.UnitOfWork(), Clock: memory.NewClock(now), IDs: &memory.SequentialIDs{},
 	}
 	deps := inboundmcp.Deps{

@@ -117,6 +117,10 @@ config:
   # its committed offsets. REQUIRED: empty = the chart refuses to render and
   # the binary refuses to boot.
   nodeTopologyConsumerGroup: ""
+  # SELLER_INBOUND_CONSUMER_GROUP: the seller-inbound consumer's STABLE group id
+  # (topic retailnetwork.seller-inbound.events, ADR 0013), same rules as above.
+  # REQUIRED: empty = the chart refuses to render and the binary refuses to boot.
+  sellerInboundConsumerGroup: ""
 
 # The chart refuses to render unless database.url or database.existingSecret
 # is set. DATABASE_URL always comes from a Secret (secretKeyRef): the one this
