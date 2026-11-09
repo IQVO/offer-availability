@@ -64,6 +64,19 @@ func startNodeConsumer(uc *usecases.ApplyNodeEvent, cfg config, logger *slog.Log
 	})
 }
 
+// startSellerConsumer starts the seller-inbound consumer (ADR 0013) under the
+// group id of SELLER_INBOUND_CONSUMER_GROUP. The reader dials on its first
+// fetch, inside its own goroutine, never here.
+func startSellerConsumer(uc *usecases.ApplySellerEvent, ignored inboundkafka.IgnoredEvents, cfg config, logger *slog.Logger) (*worker, func()) {
+	consumer := inboundkafka.NewSellerConsumer(brokerList(cfg.brokers), cfg.sellerGroup, uc, ignored, logger)
+	logger.Info("seller-inbound consumer running", "topic", inboundkafka.SellerTopic, "group", cfg.sellerGroup)
+	return startWorker("seller-inbound-consumer", logger, consumer.Run, func() {
+		if err := consumer.Close(); err != nil {
+			logger.Error("seller-inbound consumer close failed", "error", err)
+		}
+	})
+}
+
 // startJanitor deletes the rows past their retention window every interval
 // (ADR 0002, A19). A failed pass is logged and retried at the next tick.
 func startJanitor(r *postgres.Retention, cfg config, logger *slog.Logger) (*worker, func()) {

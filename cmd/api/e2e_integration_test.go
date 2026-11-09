@@ -66,6 +66,7 @@ func boot(t *testing.T) *service {
 	t.Setenv("DATABASE_URL", dbURL)
 	kafkatest.SetBrokersEnv(t)
 	t.Setenv("NODE_TOPOLOGY_CONSUMER_GROUP", fmt.Sprintf("offer-availability-e2e-%d", time.Now().UnixNano()))
+	t.Setenv("SELLER_INBOUND_CONSUMER_GROUP", fmt.Sprintf("offer-availability-seller-e2e-%d", time.Now().UnixNano()))
 	t.Setenv("HTTP_ADDR", addr)
 	t.Setenv("SHUTDOWN_DRAIN_DELAY", "0")
 	t.Setenv("OUTBOX_RELAY_INTERVAL", "100ms")
@@ -179,7 +180,7 @@ func nodeEvent(id, name, node, field, at string) kafkatest.Message {
 	return kafkatest.Message{Key: node, Value: []byte(value), Headers: map[string]string{"content-type": cloudevents.MediaType}}
 }
 
-type world struct{ bottle, mug, lstBottleA, lstMugA, lstBottleB string }
+type world struct{ bottle, mug, lstBottleA, lstMugA, lstBottleB, lstToteSeller, lstMugSeller string }
 
 func TestRealWiring(t *testing.T) {
 	s := boot(t)
@@ -204,6 +205,7 @@ func TestRealWiring(t *testing.T) {
 	t.Run("REST flow", func(t *testing.T) { w = restFlow(t, s) })
 	t.Run("idempotent replay", func(t *testing.T) { assertReplay(t, s) })
 	t.Run("node-topology suspends, reactivates and sends noise", func(t *testing.T) { nodeFlow(t, s, w) })
+	t.Run("seller-inbound suspends and reinstates a seller", func(t *testing.T) { sellerFlow(t, s, &w) })
 	t.Run("Postgres rows", func(t *testing.T) { assertRows(t, s) })
 	t.Run("exact CloudEvents on the topic", func(t *testing.T) { assertTopic(t, s, w) })
 	t.Run("Kafka down", func(t *testing.T) { assertKafkaDown(t, s) })
@@ -337,7 +339,9 @@ func nodeFlow(t *testing.T, s *service, w world) {
 
 func assertRows(t *testing.T, s *service) {
 	t.Helper()
-	for table, want := range map[string]int{"catalog_items": 3, "listings": 3, "inventory_feeds": 3, "node_status_view": 1, "processed_events": 4, "node_feed_marks": 1} {
+	for table, want := range map[string]int{
+		"catalog_items": 4, "listings": 5, "inventory_feeds": 3, "node_status_view": 1, "seller_status_view": 1, "processed_events": 7, "node_feed_marks": 1,
+	} {
 		if got := s.count(`SELECT count(*) FROM ` + table); got != want {
 			t.Errorf("%s holds %d rows, want %d", table, got, want)
 		}
@@ -369,6 +373,10 @@ var expectedTypes = []string{
 	"listing.ListingSuppressed", "listing.ListingSuppressed",
 	"catalogitem.CatalogItemDiscontinued", "listing.ListingSuppressed", "listing.ListingSuppressed",
 	"listing.ListingRestored",
+	// sellerFlow (ADR 0013).
+	"catalogitem.CatalogItemCreated", "listing.ListingCreated", "listing.ListingSuppressed",
+	"listing.ListingCreated", "listing.ListingSuppressed",
+	"listing.ListingRestored", "listing.ListingRestored",
 }
 
 func assertTopic(t *testing.T, s *service, w world) {
@@ -448,6 +456,7 @@ func assertTopic(t *testing.T, s *service, w world) {
 	if d := data(14); str(d, "listingId") != w.lstMugA || str(d, "nodeId") != "node-a" {
 		t.Errorf("ListingRestored data = %v", d)
 	}
+	assertSellerData(t, w, data)
 }
 
 // assertKafkaDown stops the broker: /readyz must answer 503
