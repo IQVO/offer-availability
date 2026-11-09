@@ -8,6 +8,7 @@ import (
 	"github.com/claudioed/offer-availability/internal/domain/feed"
 	"github.com/claudioed/offer-availability/internal/domain/listing"
 	"github.com/claudioed/offer-availability/internal/domain/nodestatus"
+	"github.com/claudioed/offer-availability/internal/domain/sellerstatus"
 	"github.com/claudioed/offer-availability/internal/domain/shared"
 )
 
@@ -63,6 +64,27 @@ func NewNodeView(t testing.TB, id nodestatus.ID, status nodestatus.Status) *node
 		t.Fatalf("nodestatus.New: %v", err)
 	}
 	return v
+}
+
+// NewSellerView builds a seller status view (version 1) at Now.
+func NewSellerView(t testing.TB, id sellerstatus.ID, status sellerstatus.Status) *sellerstatus.View {
+	t.Helper()
+	v, err := sellerstatus.New(id, status, Now)
+	if err != nil {
+		t.Fatalf("sellerstatus.New: %v", err)
+	}
+	return v
+}
+
+// NewOwnedListing builds a listing (version 1) of owner from s, which may start
+// it SUPPRESSED.
+func NewOwnedListing(t testing.TB, id listing.ID, item listing.ItemID, node listing.NodeID, owner listing.OwnerRef, s listing.Sellability) *listing.Listing {
+	t.Helper()
+	l, _, err := listing.CreateOwned(id, item, node, owner, s, Now)
+	if err != nil {
+		t.Fatalf("listing.CreateOwned: %v", err)
+	}
+	return l
 }
 
 // SomeEvents returns real domain events for the outbox cases.

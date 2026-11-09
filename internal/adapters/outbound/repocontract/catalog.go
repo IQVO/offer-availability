@@ -11,7 +11,7 @@ import (
 )
 
 var catalogCases = []named{
-	{"save then get round-trips the snapshot", catalogRoundTrip},
+	{caseRoundTrip, catalogRoundTrip},
 	{caseGetMiss, catalogGetMiss},
 	{caseDuplicateID, catalogDuplicateID},
 	{caseVersionRace, catalogUpdateVersions},

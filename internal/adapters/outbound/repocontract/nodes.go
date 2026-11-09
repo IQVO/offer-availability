@@ -18,7 +18,7 @@ var markCases = []named{
 }
 
 var nodeStatusCases = []named{
-	{"save then get round-trips the snapshot", nodeRoundTrip},
+	{caseRoundTrip, nodeRoundTrip},
 	{caseGetMiss, nodeGetMiss},
 	{caseDuplicateID, nodeDuplicateID},
 	{caseVersionRace, nodeUpdateVersions},

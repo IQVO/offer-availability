@@ -49,7 +49,7 @@ func newEnv(t *testing.T) *env {
 		outbox: &flakyOutbox{EventOutbox: s.Outbox()},
 	}
 	e.deps = usecases.Deps{
-		Catalog: e.catalog, Listings: e.listings, Feeds: e.feeds, Marks: e.marks, Nodes: e.nodes, Inbox: e.inbox,
+		Catalog: e.catalog, Listings: e.listings, Feeds: e.feeds, Marks: e.marks, Nodes: e.nodes, Sellers: s.Sellers(), Inbox: e.inbox,
 		Outbox: e.outbox, UoW: s.UnitOfWork(), Clock: e.clock, IDs: &memory.SequentialIDs{},
 	}
 	return e

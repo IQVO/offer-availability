@@ -47,7 +47,8 @@ func TestRepositoryContract(t *testing.T) {
 		return repocontract.Fixture{
 			Catalog: postgres.NewCatalogRepo(pool), Listings: postgres.NewListingRepo(pool), Feeds: postgres.NewFeedRepo(pool),
 			Marks: postgres.NewNodeFeedMarks(pool), Nodes: postgres.NewNodeStatusRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
-			Outbox: postgres.NewEventOutbox(postgres.NewOutboxRepo(pool), stubEncoder{}), UoW: postgres.NewUnitOfWork(pool),
+			Sellers: postgres.NewSellerStatusRepo(pool),
+			Outbox:  postgres.NewEventOutbox(postgres.NewOutboxRepo(pool), stubEncoder{}), UoW: postgres.NewUnitOfWork(pool),
 			OutboxCount: func(ctx context.Context) (int, error) {
 				var n int
 				err := pool.QueryRow(ctx, `SELECT count(*) FROM outbox_events`).Scan(&n)
@@ -77,10 +78,10 @@ func TestMigrationsUpDownUp(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `
 		SELECT count(*) FROM information_schema.tables
 		WHERE table_schema = 'public' AND table_name IN
-		('catalog_items','listings','inventory_feeds','node_feed_marks','node_status_view','processed_events','outbox_events','idempotency_keys')`).Scan(&tables); err != nil {
+		('catalog_items','listings','inventory_feeds','node_feed_marks','node_status_view','seller_status_view','processed_events','outbox_events','idempotency_keys')`).Scan(&tables); err != nil {
 		t.Fatal(err)
 	}
-	if tables != 8 {
-		t.Fatalf("tables after up/down/up = %d, want 8", tables)
+	if tables != 9 {
+		t.Fatalf("tables after up/down/up = %d, want 9", tables)
 	}
 }

@@ -97,7 +97,7 @@ func seedThroughWriteUseCases(t *testing.T, url string) (itemID, listingID strin
 	outbox := postgres.NewOutboxRepo(pool)
 	d := usecases.Deps{
 		Catalog: postgres.NewCatalogRepo(pool), Listings: postgres.NewListingRepo(pool), Feeds: postgres.NewFeedRepo(pool),
-		Marks: postgres.NewNodeFeedMarks(pool), Nodes: postgres.NewNodeStatusRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
+		Marks: postgres.NewNodeFeedMarks(pool), Nodes: postgres.NewNodeStatusRepo(pool), Sellers: postgres.NewSellerStatusRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
 		Outbox: postgres.NewEventOutbox(outbox, outboundkafka.NewEncoder()), UoW: postgres.NewUnitOfWork(pool),
 		Clock: clock.System{}, IDs: ids.UUID{},
 	}
