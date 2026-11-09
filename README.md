@@ -43,7 +43,7 @@ view of this context is on the aggregator,
 
 - **Catalogue**: create a catalogue item (title, dimensions, weight, hazmat, fragile) and discontinue it; discontinuing suppresses every listing of the item.
 - **Identifiers and packaging**: an item may carry a GS1 `identifiers.gtin` and a packaging hierarchy `EACH < INNER < CASE < PALLET` (each level a GTIN with `unitsPerPack` in eaches, a child GTIN chain, optional dimensions and weight). The `unitsPerPack` of a GTIN never changes: a new count is a new GTIN and the old level is retired ([ADR 0006](docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md)).
-- **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE` or `DISCONTINUED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned.
+- **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE` or `DISCONTINUED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned. A seller's received inbound shipment (seller-inbound `InboundShipmentReceived`) creates the seller's listings of the received items at availability 0 (ADR 0014).
 - **Inventory feeds**: a vendor sends the quantity a node can ship for its listings, with the basis it gave (`PHYSICAL`, `THROUGHPUT_CONSTRAINED`).
   A feed is applied in one transaction; a stale line is skipped and counted, an older feed is `SUPERSEDED`, a broken line makes the feed `FAILED`
   (recorded, and it may be sent again), and a full feed zeroes the listings it omits.

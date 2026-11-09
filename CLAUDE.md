@@ -2,7 +2,7 @@
 
 harness-template: v4
 
-Retail network, bounded context Offer & Availability (Supporting, commerce tier). Owns CatalogItem, Listing and InventoryFeed and publishes them; consumes the four node-topology lifecycle events and seller-inbound's SellerSuspended/SellerReinstated into local node and seller status views (ADR 0013) and calls no sibling.
+Retail network, bounded context Offer & Availability (Supporting, commerce tier). Owns CatalogItem, Listing and InventoryFeed and publishes them; consumes the four node-topology lifecycle events and seller-inbound's SellerSuspended/SellerReinstated into local node and seller status views (ADR 0013), creates sellers' listings from InboundShipmentReceived (ADR 0014) and calls no sibling.
 Design source of truth: IQVO/warehouse-docs `network/model/model.yaml` (context offer-availability). This service belongs to the retail network, not the warehouse-systems fleet.
 This project is a domain-driven design study, not associated with any company: never name a real company, brand or product in code, comments, ADRs, specs, tests or fixtures (README `## Disclaimer`).
 
@@ -30,7 +30,7 @@ A FAILED inventory feed answers 422 and is still stored (`keepWrites`, ADR 0005)
 ## Events: CloudEvents 1.0 is MANDATORY
 Published: type `com.retailnetwork.commerce.offer-availability.<entity>.<Event>` (entity: catalogitem, listing, inventoryfeed); source `/retailnetwork/offer-availability`; dataschema `urn:retailnetwork:offer-availability:events:<Event>:v1`;
 all seven events on `retailnetwork.offer-availability.events` (nothing analytics-only); subject and Kafka key = aggregate id; header `content-type: application/cloudevents+json; charset=UTF-8`.
-Consumed: `com.retailnetwork.logistics.node-topology.node.{NodeRegistered,NodeActivated,NodeSuspended,NodeRetired}` from `retailnetwork.node-topology.events`, and `com.retailnetwork.partner.seller-inbound.seller.{SellerSuspended,SellerReinstated}` from `retailnetwork.seller-inbound.events` (other types counted, ADR 0013); inbox `processed_events`, DLQ `<topic>.dlq`, groups from `NODE_TOPOLOGY_CONSUMER_GROUP` / `SELLER_INBOUND_CONSUMER_GROUP` (never a literal).
+Consumed: `com.retailnetwork.logistics.node-topology.node.{NodeRegistered,NodeActivated,NodeSuspended,NodeRetired}` from `retailnetwork.node-topology.events`, and `com.retailnetwork.partner.seller-inbound.seller.{SellerSuspended,SellerReinstated}` + `...inboundshipment.InboundShipmentReceived` from `retailnetwork.seller-inbound.events` (other types counted, ADR 0013/0014); inbox `processed_events`, DLQ `<topic>.dlq`, groups from `NODE_TOPOLOGY_CONSUMER_GROUP` / `SELLER_INBOUND_CONSUMER_GROUP` (never a literal).
 Use internal/adapters/kafka/cloudevents only. Transactional outbox: aggregates + outbox rows in ONE Postgres transaction, id minted once at append, at-least-once delivery. No `warehouse.*` topic, ever.
 A new event: domain struct + apis/asyncapi.yaml + ADR 0004 `type:` line in the SAME commit + encoder payload + golden test (.claude/skills/how-to-add-an-integration-event).
 

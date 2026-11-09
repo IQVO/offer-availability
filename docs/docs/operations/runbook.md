@@ -37,8 +37,14 @@ The `api` process (`cmd/api/run.go`) runs four things at once:
   `retailnetwork.node-topology.events` under `NODE_TOPOLOGY_CONSUMER_GROUP`, applies each event in one transaction with
   its `processed_events` inbox row, commits the offset after.
 - **Seller-inbound consumer** (`internal/adapters/inbound/kafka/seller_consumer.go`, ADR 0013): reads
-  `retailnetwork.seller-inbound.events` under `SELLER_INBOUND_CONSUMER_GROUP` the same way; applies `SellerSuspended` and
-  `SellerReinstated`, counts every other type in `availability.seller_events.ignored`.
+  `retailnetwork.seller-inbound.events` under `SELLER_INBOUND_CONSUMER_GROUP` the same way; applies `SellerSuspended`,
+  `SellerReinstated` and `InboundShipmentReceived` (`received_consumer.go`, ADR 0014: the seller's listings of received
+  stock), counts every other type in `availability.seller_events.ignored` (`reason=type_not_consumed`). A received line
+  whose item does not resolve logs `a received line resolves to no catalogue item; skipped` (WARN, with `gtin`) and counts
+  `reason=gtin_unresolved` or `item_unknown`; an event without `received` (published before the producer carried it)
+  creates nothing and counts `reason=received_unknown`. A steady `gtin_unresolved` means the catalogue lacks the
+  packaging the seller ships: declare the pack level (`PUT /catalog-items/{id}/packaging/{level}`), then create the
+  listing over `POST /listings`.
 - **Retention janitor** (`cmd/api/workers.go` `startJanitor` over `internal/adapters/outbound/postgres/retention.go`):
   every `RETENTION_INTERVAL` (default 1 h) it deletes `idempotency_keys` older than 24 h and `inventory_feeds` and
   `processed_events` older than 30 days, in separate `DELETE`s. A failed pass is logged (`retention purge failed`) and
@@ -139,7 +145,7 @@ the pod from booting (`ping postgres` / `run migrations` errors in the log, then
 | --- | --- | --- | --- | --- |
 | `retailnetwork.offer-availability.events` | produced by the outbox relay | aggregate id | the relay's writer: acks=all, hash balancer | All nine event types; content type `application/cloudevents+json; charset=UTF-8`. |
 | `retailnetwork.node-topology.events` | consumed | n/a | group = `NODE_TOPOLOGY_CONSUMER_GROUP` (chart: `offer-availability-node-topology`) | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`; offset committed after the handler succeeded. |
-| `retailnetwork.seller-inbound.events` | consumed | n/a | group = `SELLER_INBOUND_CONSUMER_GROUP` (chart: `offer-availability-seller-inbound`) | `SellerSuspended`, `SellerReinstated` (ADR 0013); every other type is counted and skipped; dead letters to `retailnetwork.seller-inbound.events.dlq`. |
+| `retailnetwork.seller-inbound.events` | consumed | n/a | group = `SELLER_INBOUND_CONSUMER_GROUP` (chart: `offer-availability-seller-inbound`) | `SellerSuspended`, `SellerReinstated` (ADR 0013), `InboundShipmentReceived` (ADR 0014); every other type is counted and skipped; dead letters to `retailnetwork.seller-inbound.events.dlq`. |
 | `retailnetwork.node-topology.events.dlq` | produced by the consumer | source key | the dead-letter writer | Headers `x-dlq-source-topic`, `x-dlq-source-partition`, `x-dlq-source-offset`, `x-dlq-error`, `x-dlq-failed-at`. Nothing reads it. |
 
 ## The outbox in operation

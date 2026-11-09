@@ -113,3 +113,19 @@ type: com.retailnetwork.partner.seller-inbound.seller.SellerReinstated stream: e
 `DISCONTINUED` > `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED`). A consumer of
 `ListingSuppressed` keeps the latest reason per listing, as it already does for
 the A4 upgrade.
+
+## Amendment 2026-11-09: InboundShipmentReceived ([ADR 0014](./0014-received-stock-creates-owner-listings.md))
+
+One more consumed type, on the seller-inbound topic:
+
+```text
+type: com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived stream: events
+```
+
+| Consumed type | Topic | Fields read | Effect |
+|---|---|---|---|
+| `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `retailnetwork.seller-inbound.events` | `sellerId`, `nodeId`, `received[].{catalogItemId?, gtin, qtyEaches}` | The seller's listings of the received items, when absent (ADR 0013 rule 8, ADR 0014) |
+
+`availability.seller_events.ignored` gains the attribute `reason`:
+`type_not_consumed` (every other type of the topic), `received_unknown`,
+`gtin_unresolved`, `item_unknown` (ADR 0014). No published type changes.

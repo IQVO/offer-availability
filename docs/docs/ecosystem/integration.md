@@ -54,12 +54,17 @@ aggregator's context map; this repository holds the contract of its own side onl
 - **Topic and group.** `retailnetwork.seller-inbound.events`, read by a second consumer under
   `SELLER_INBOUND_CONSUMER_GROUP` (mandatory, never defaulted; ADR 0013).
 - **Contract.** CloudEvents types `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` (reads `sellerId`,
-  `suspendedAt`) and `...seller.SellerReinstated` (reads `sellerId`, `reinstatedAt`), restated in `apis/asyncapi.yaml`.
-  Every other type on the topic is acknowledged and counted in `availability.seller_events.ignored`.
+  `suspendedAt`), `...seller.SellerReinstated` (reads `sellerId`, `reinstatedAt`) and
+  `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` (reads `sellerId`, `nodeId`,
+  `received[].{catalogItemId?, gtin, qtyEaches}`; ADR 0014), restated in `apis/asyncapi.yaml`. Every other type on the
+  topic is acknowledged and counted in `availability.seller_events.ignored` (`reason=type_not_consumed`).
 - **Effect.** The events fold into the local `seller_status_view` (an unknown seller is `ACTIVE`, an older event is
   ignored); the seller's listings are suppressed with `OWNER_SUSPENDED` or restored. Nothing queries seller-inbound.
-- **Not consumed yet.** `InboundShipmentReceived` carries no received item lines, so received seller stock does not create
-  listings yet (ADR 0013, gap G51 open).
+- **Received stock (G51, ADR 0014).** Each received item without a listing of (item, node, seller) gets one at 0 /
+  `UNKNOWN` (suppressed when the node is not sellable, the item discontinued or the seller suspended); an existing listing
+  is untouched and availability still comes only from the vendor feed. A line resolves by `catalogItemId`, else by `gtin`
+  through the local GTIN/packaging index; an unresolvable line is a WARN counted `gtin_unresolved` (or `item_unknown`), and
+  an event published before the producer carried `received` creates nothing (`received_unknown`).
 - **Failure behaviour.** As for node-topology, with dead letters on `retailnetwork.seller-inbound.events.dlq`.
 
 ## Caller: `vendor-connectivity` (REST `POST /inventory-feeds`)
