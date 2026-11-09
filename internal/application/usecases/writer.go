@@ -37,6 +37,9 @@ type Deps struct {
 	// Metrics records the business outcome of each inventory feed attempt; nil
 	// records nothing, so unit tests need no wiring.
 	Metrics ports.FeedMetrics
+	// ReceivedMetrics counts the received-stock skips of ApplyReceivedStock
+	// (ADR 0014); nil records nothing.
+	ReceivedMetrics ports.ReceivedStockMetrics
 	// FeedChunkSize caps how many changed listings and outbox events one
 	// batch write carries while a feed settles. A full feed can touch every
 	// listing of a node, so the settle loop writes in batches of at most this
@@ -72,6 +75,16 @@ func (noMetrics) FeedApplied(context.Context)          {}
 func (noMetrics) FeedSuperseded(context.Context)       {}
 func (noMetrics) FeedFailed(context.Context, string)   {}
 func (noMetrics) FeedRejected(context.Context, string) {}
+
+// receivedMetrics returns the configured ReceivedStockMetrics or a no-op.
+func (d Deps) receivedMetrics() ports.ReceivedStockMetrics {
+	if d.ReceivedMetrics != nil {
+		return d.ReceivedMetrics
+	}
+	return noMetrics{}
+}
+
+func (noMetrics) ReceivedSkipped(context.Context, string, string) {}
 
 // writer is what every command embeds.
 type writer struct{ Deps }

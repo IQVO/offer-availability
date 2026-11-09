@@ -117,6 +117,13 @@ func (f *flakyListings) FindByItemAndNode(ctx context.Context, i listing.ItemID,
 	return f.ListingRepository.FindByItemAndNode(ctx, i, n)
 }
 
+func (f *flakyListings) FindByItemNodeOwner(ctx context.Context, i listing.ItemID, n listing.NodeID, o listing.OwnerRef) (*listing.Listing, error) {
+	if f.findErr != nil {
+		return nil, f.findErr
+	}
+	return f.ListingRepository.FindByItemNodeOwner(ctx, i, n, o)
+}
+
 func (f *flakyListings) GetMany(ctx context.Context, ids []listing.ID) ([]*listing.Listing, error) {
 	if f.getManyErr != nil {
 		return nil, f.getManyErr
