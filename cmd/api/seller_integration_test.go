@@ -88,14 +88,52 @@ func sellerFlow(t *testing.T, s *service, w *world) {
 	if got := s.count(`SELECT count(*) FROM seller_status_view WHERE seller_id = $1 AND status = 'ACTIVE' AND version = 2`, seller); got != 1 {
 		t.Fatalf("seller_status_view rows for %s ACTIVE v2 = %d", seller, got)
 	}
-	// Node events 4 + seller events 3 (the duplicate, the ignored type and the poison are not in the inbox).
+	// Node events 4 + seller events 3 + the InboundShipmentReceived without its
+	// list (UNKNOWN: inbox only); the duplicate, the ignored type and the poison
+	// are not in the inbox.
 	s.eventually(30*time.Second, "all consumed events processed", func() bool {
-		return s.count(`SELECT count(*) FROM processed_events`) == 7
+		return s.count(`SELECT count(*) FROM processed_events`) == 8
+	})
+	receivedFlow(t, s, w, tote)
+}
+
+// receivedFlow: an InboundShipmentReceived with a `received` list creates the
+// owner listing of the new item, leaves the existing tote listing alone and
+// skips the GTIN no item holds (ADR 0014).
+func receivedFlow(t *testing.T, s *service, w *world, tote string) {
+	t.Helper()
+	w.napkin = str(s.write(http.MethodPost, "/catalog-items", `{"title":"Linen napkin","lengthMm":400,"widthMm":400,"heightMm":2,"weightG":40}`, http.StatusCreated), "catalogItemId")
+	kafkatest.Produce(t, inboundkafka.SellerTopic, sellerEvent("evt-recv-2", "inboundshipment.InboundShipmentReceived",
+		`{"shipmentId":"shp-2","sellerId":"`+seller+`","nodeId":"node-a","status":"CLOSED","cartons":[{"sscc":"006141410000000029","status":"RECEIVED"}],`+
+			`"receivedAt":"2026-10-23T16:30:00Z","received":[{"catalogItemId":"`+w.napkin+`","gtin":"00614141000012","qtyEaches":24},`+
+			`{"catalogItemId":"`+tote+`","gtin":"00614141000029","qtyEaches":6},{"gtin":"00614141000036","qtyEaches":6}]}`))
+	var got map[string]any
+	s.eventually(60*time.Second, "the received napkin listing", func() bool {
+		items := decode(t, s.get("/listings?nodeId=node-a&catalogItemId="+w.napkin))["items"].([]any)
+		if len(items) != 1 {
+			return false
+		}
+		got = items[0].(map[string]any)
+		return true
+	})
+	av := got["availability"].(map[string]any)
+	if str(got, "ownerRef") != seller || str(got, "state") != "LIVE" || av["availableQty"] != float64(0) || av["basis"] != "UNKNOWN" {
+		t.Fatalf("received listing = %v", got)
+	}
+	w.lstNapkinSeller = str(got, "listingId")
+	if state := listingState(t, s, w.lstToteSeller); state != "LIVE/" {
+		t.Fatalf("the existing tote listing changed: %s", state)
+	}
+	if n := s.count(`SELECT count(*) FROM listings WHERE catalog_item_id = $1 AND owner_ref = $2`, tote, seller); n != 1 {
+		t.Fatalf("tote listings of the seller = %d, want the existing one", n)
+	}
+	s.eventually(30*time.Second, "the received event processed", func() bool {
+		return s.count(`SELECT count(*) FROM processed_events`) == 9
 	})
 }
 
-// assertSellerData checks the payloads the seller flow published (indexes 15..21
-// of expectedTypes).
+// assertSellerData checks the payloads the seller and received flows published
+// (indexes 15..23 of expectedTypes).
 func assertSellerData(t *testing.T, w world, data func(int) map[string]any) {
 	t.Helper()
 	if d := data(16); str(d, "listingId") != w.lstToteSeller || str(d, "ownerRef") != seller {
@@ -106,5 +144,8 @@ func assertSellerData(t *testing.T, w world, data func(int) map[string]any) {
 	}
 	if d := data(19); str(d, "listingId") != w.lstMugSeller || str(d, "reason") != "OWNER_SUSPENDED" {
 		t.Errorf("ListingSuppressed of a listing created for a suspended owner = %v", d)
+	}
+	if d := data(23); str(d, "listingId") != w.lstNapkinSeller || str(d, "catalogItemId") != w.napkin || str(d, "nodeId") != "node-a" || str(d, "ownerRef") != seller {
+		t.Errorf("ListingCreated of received stock = %v", d)
 	}
 }
