@@ -49,6 +49,19 @@ aggregator's context map; this repository holds the contract of its own side onl
 - **Ordering assumption.** node-topology keys its events by `nodeId`, so one node's events arrive in order; an observation
   older than the stored status is ignored anyway, and `RETIRED` is final.
 
+## Upstream: `seller-inbound` (Kafka, consumed)
+
+- **Topic and group.** `retailnetwork.seller-inbound.events`, read by a second consumer under
+  `SELLER_INBOUND_CONSUMER_GROUP` (mandatory, never defaulted; ADR 0013).
+- **Contract.** CloudEvents types `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` (reads `sellerId`,
+  `suspendedAt`) and `...seller.SellerReinstated` (reads `sellerId`, `reinstatedAt`), restated in `apis/asyncapi.yaml`.
+  Every other type on the topic is acknowledged and counted in `availability.seller_events.ignored`.
+- **Effect.** The events fold into the local `seller_status_view` (an unknown seller is `ACTIVE`, an older event is
+  ignored); the seller's listings are suppressed with `OWNER_SUSPENDED` or restored. Nothing queries seller-inbound.
+- **Not consumed yet.** `InboundShipmentReceived` carries no received item lines, so received seller stock does not create
+  listings yet (ADR 0013, gap G51 open).
+- **Failure behaviour.** As for node-topology, with dead letters on `retailnetwork.seller-inbound.events.dlq`.
+
 ## Caller: `vendor-connectivity` (REST `POST /inventory-feeds`)
 
 `vendor-connectivity` owns the vendor-facing protocol (vendor authentication, asynchronous transactions, rate limits, the

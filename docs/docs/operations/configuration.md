@@ -12,7 +12,7 @@ through environment variables. There is no config file, no flag and no secret-ma
 REST, MCP and A2A are unauthenticated fleet-wide, so there is no token or key to configure.
 
 The service runs on real Postgres and real Kafka only. `cmd/api` has three mandatory variables (`DATABASE_URL`,
-`KAFKA_BROKERS`, `NODE_TOPOLOGY_CONSUMER_GROUP`); `cmd/mcp` needs `DATABASE_URL`; `cmd/a2a` needs `DATABASE_URL` and
+`KAFKA_BROKERS`, `NODE_TOPOLOGY_CONSUMER_GROUP`, `SELLER_INBOUND_CONSUMER_GROUP`); `cmd/mcp` needs `DATABASE_URL`; `cmd/a2a` needs `DATABASE_URL` and
 `A2A_AGENT_URL`. A missing mandatory variable is a boot error that names it, raised before the listener binds. Only
 `cmd/api` dials Kafka: `cmd/mcp` and `cmd/a2a` have no `KAFKA_BROKERS`, no consumer group and no outbox.
 
@@ -29,6 +29,7 @@ default; the exceptions are noted per row.
 | `MIGRATIONS_DATABASE_URL` | value of `DATABASE_URL` | no | Direct (non-pooled) DSN used only for the boot migrations, because golang-migrate holds a session advisory lock that breaks behind a transaction-pooling proxy. Empty falls back to `DATABASE_URL`. |
 | `KAFKA_BROKERS` | none | **yes** | Comma-separated `host:port` list (entries trimmed, blanks dropped). Missing or blank = boot error `missing required environment variable: KAFKA_BROKERS (comma-separated host:port list)`. Used by the outbox relay, the node-topology consumer and the `/readyz` metadata check. From the host, the fleet's single broker is `localhost:9092`. |
 | `NODE_TOPOLOGY_CONSUMER_GROUP` | none | **yes** | Consumer group id of the node-topology consumer. Never defaulted, so a local process cannot join a live cluster's group by accident. Missing or blank = boot error `missing required environment variable: NODE_TOPOLOGY_CONSUMER_GROUP`. |
+| `SELLER_INBOUND_CONSUMER_GROUP` | none | **yes** | Consumer group id of the seller-inbound consumer (topic `retailnetwork.seller-inbound.events`, ADR 0013). Same rules. Missing or blank = boot error `missing required environment variable: SELLER_INBOUND_CONSUMER_GROUP`. |
 | `HTTP_ADDR` | `:8080` | no | Listen address of the REST server (also serves `/healthz` and `/readyz`). |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | no | Pause between relay passes that did not fill a batch (batch = 100 rows). A Go duration (`500ms`, `2s`) or plain seconds (`2`, `0.5`). Unparsable or non-positive = warning + default. |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | no | Failures after which the relay stops claiming an outbox row. `0` = unlimited. Negative or unparsable = warning + `20`, so a typo never removes the cap ([ADR 0005](/docs/adr/0005-runtime-relay-consumer-and-idempotency)). |

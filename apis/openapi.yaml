@@ -280,7 +280,10 @@ paths:
         local node status view. Otherwise (node proposed, suspended, retired or
         not yet known) it starts SUPPRESSED with reason NODE_NOT_SELLABLE; for a
         DISCONTINUED item it starts SUPPRESSED with reason DISCONTINUED (Gap
-        Register G24). Its availability starts at 0, basis UNKNOWN, with no asOf.
+        Register G24); for an ownerRef whose seller the local seller status view
+        says is SUSPENDED it starts SUPPRESSED with reason OWNER_SUSPENDED (ADR
+        0013). The highest cause wins: DISCONTINUED, then NODE_NOT_SELLABLE, then
+        OWNER_SUSPENDED. Its availability starts at 0, basis UNKNOWN, with no asOf.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -723,8 +726,12 @@ components:
       enum: [LIVE, SUPPRESSED]
     SuppressionReason:
       type: string
-      description: NODE_NOT_SELLABLE while the node is not ACTIVE; DISCONTINUED once the item is discontinued (final).
-      enum: [NODE_NOT_SELLABLE, DISCONTINUED]
+      description: >-
+        The highest active cause, by precedence DISCONTINUED > NODE_NOT_SELLABLE >
+        OWNER_SUSPENDED: DISCONTINUED once the item is discontinued (final);
+        NODE_NOT_SELLABLE while the node is not ACTIVE; OWNER_SUSPENDED while the
+        seller that owns the listing (ownerRef) is suspended (ADR 0013).
+      enum: [NODE_NOT_SELLABLE, DISCONTINUED, OWNER_SUSPENDED]
     Availability:
       type: object
       required: [availableQty, basis]

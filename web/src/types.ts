@@ -6,7 +6,7 @@ export type CatalogItemState = (typeof CATALOG_ITEM_STATES)[number];
 export const LISTING_STATES = ["LIVE", "SUPPRESSED"] as const;
 export type ListingState = (typeof LISTING_STATES)[number];
 
-export const SUPPRESSION_REASONS = ["NODE_NOT_SELLABLE", "DISCONTINUED"] as const;
+export const SUPPRESSION_REASONS = ["NODE_NOT_SELLABLE", "DISCONTINUED", "OWNER_SUSPENDED"] as const;
 export type SuppressionReason = (typeof SUPPRESSION_REASONS)[number];
 
 export const AVAILABILITY_BASES = ["PHYSICAL", "THROUGHPUT_CONSTRAINED", "UNKNOWN"] as const;

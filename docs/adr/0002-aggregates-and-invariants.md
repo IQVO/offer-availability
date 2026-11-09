@@ -240,3 +240,16 @@ a pure function so the ordering rules (A13) are mutation-tested.
 - **A24 Zeroing a listing already at 0.** Part of A10, restated because a client
   can trip over it: a full feed that omits a listing never fed (0, `UNKNOWN`, no
   `asOf`) leaves it untouched, and `zeroedCount` does not count it.
+
+## Amendment 2026-11-08: the owner as a third cause ([ADR 0013](./0013-seller-status-and-received-stock-drive-owner-listings.md))
+
+- **A25 Precedence of the suppression reasons.** A listing shows one reason, the
+  highest active cause: `DISCONTINUED` (final) > `NODE_NOT_SELLABLE` >
+  `OWNER_SUSPENDED`. A4's upgrade generalises: `Suppress` on a `SUPPRESSED`
+  listing is legal only for a reason that outranks the current one. When a higher
+  cause clears (`NodeActivated`, `SellerReinstated`), `Listing.Reconcile` hands
+  the listing to the remaining highest cause with one `ListingSuppressed`, or
+  restores it when none holds. A5's initial state takes the owner into account the
+  same way (a `SUSPENDED` owner starts the listing `SUPPRESSED(OWNER_SUSPENDED)`
+  unless a higher cause applies). A14's `NodeActivated` restore therefore leaves a
+  listing whose owner is suspended at `OWNER_SUSPENDED`.

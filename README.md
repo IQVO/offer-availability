@@ -105,13 +105,14 @@ Consumed from `retailnetwork.node-topology.events` ([ADR 0003](docs/adr/0003-con
 
 ## Running it
 
-Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS` and `NODE_TOPOLOGY_CONSUMER_GROUP` are mandatory (a boot error names the missing
-variable); the embedded migrations run at boot and the outbox relay, the consumer and the retention janitor are always on.
+Real PostgreSQL and Kafka only. `DATABASE_URL`, `KAFKA_BROKERS`, `NODE_TOPOLOGY_CONSUMER_GROUP` and `SELLER_INBOUND_CONSUMER_GROUP` are mandatory (a boot error names the missing
+variable); the embedded migrations run at boot and the outbox relay, the two consumers and the retention janitor are always on.
 
 ```sh
 export DATABASE_URL=postgres://user:***@localhost:5432/offer_availability?sslmode=disable
 export KAFKA_BROKERS=localhost:29092                   # whatever your broker advertises
 export NODE_TOPOLOGY_CONSUMER_GROUP=offer-availability-local
+export SELLER_INBOUND_CONSUMER_GROUP=offer-availability-seller-local
 go run ./cmd/api                                       # listens on :8080 (HTTP_ADDR)
 ```
 
@@ -127,6 +128,7 @@ All settings, the probes, the shutdown order and the outbox runbook: [Configurat
 | `MIGRATIONS_DATABASE_URL` | `DATABASE_URL` | Direct DSN for the boot migrations |
 | `KAFKA_BROKERS` | **required** | Comma-separated `host:port` list; unset ⇒ boot error |
 | `NODE_TOPOLOGY_CONSUMER_GROUP` | **required** | Stable node-topology consumer group id, never defaulted (a local run cannot silently join a live cluster's group) |
+| `SELLER_INBOUND_CONSUMER_GROUP` | **required** | Stable seller-inbound consumer group id (`retailnetwork.seller-inbound.events`, ADR 0013), never defaulted |
 | `HTTP_ADDR` | `:8080` | Listen address |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | Relay sleep between passes (Go duration or plain seconds) |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | Outbox attempt cap before a row is excluded from the relay |

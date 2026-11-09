@@ -10,7 +10,9 @@ paths:
 offer-availability PUBLISHES seven integration events to
 `retailnetwork.offer-availability.events` and CONSUMES four node-topology events
 from `retailnetwork.node-topology.events` (ADR 0003) under the consumer group
-`NODE_TOPOLOGY_CONSUMER_GROUP`. The topic `retailnetwork.offer-availability.analytics`
+`NODE_TOPOLOGY_CONSUMER_GROUP`, plus two seller-inbound events from
+`retailnetwork.seller-inbound.events` (ADR 0013) under
+`SELLER_INBOUND_CONSUMER_GROUP`. The topic `retailnetwork.offer-availability.analytics`
 is unused: no event is analytics-only. Never produce or consume a `warehouse.*` topic.
 
 ## Events: CloudEvents 1.0 is MANDATORY
@@ -25,8 +27,8 @@ structured content mode. This is a hard rule, not a preference:
   through ONE helper package, `internal/adapters/kafka/cloudevents` (`New`,
   `Decode`, `ContentTypeHeader`). Transport stays `segmentio/kafka-go`; no
   hand-rolled CloudEvent structs. The only producer-side caller is the encoder
-  `internal/adapters/outbound/kafka/encoder.go`; the only consumer-side caller is
-  `internal/adapters/inbound/kafka/node_consumer.go`.
+  `internal/adapters/outbound/kafka/encoder.go`; the only consumer-side callers are
+  `internal/adapters/inbound/kafka/node_consumer.go` and `seller_consumer.go`.
 - Every message carries the Kafka header
   `content-type: application/cloudevents+json; charset=UTF-8`. Message key =
   aggregate id, `kafkago.Hash{}` balancer (`internal/adapters/outbound/kafka/writer.go`).
@@ -76,6 +78,15 @@ FULL `type` (`node_consumer.go`); every other type on the topic is ignored:
 | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `nodeId`, `activatedAt` |
 | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `nodeId`, `suspendedAt` |
 | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `nodeId`, `retiredAt` |
+
+From seller-inbound, topic `retailnetwork.seller-inbound.events`, dispatched on the
+FULL `type` (`seller_consumer.go`); every other type on the topic is counted in
+`availability.seller_events.ignored` and skipped (ADR 0013):
+
+| `type` | read fields |
+| --- | --- |
+| `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `sellerId`, `suspendedAt` |
+| `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` |
 
 Decoding is tolerant: only these fields are read. Each event is handled by
 `usecases.ApplyNodeEvent` in ONE unit of work together with its inbox row
