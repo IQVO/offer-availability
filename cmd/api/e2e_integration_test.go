@@ -67,6 +67,12 @@ func boot(t *testing.T) *service {
 	kafkatest.SetBrokersEnv(t)
 	t.Setenv("NODE_TOPOLOGY_CONSUMER_GROUP", fmt.Sprintf("offer-availability-e2e-%d", time.Now().UnixNano()))
 	t.Setenv("SELLER_INBOUND_CONSUMER_GROUP", fmt.Sprintf("offer-availability-seller-e2e-%d", time.Now().UnixNano()))
+	// A consumer group joined while its topic does not exist gets no partition and
+	// never picks the topic up later (docs/docs/operations/troubleshooting.md), so
+	// the seller topic exists before the binary starts, as the deployment ensures.
+	// The seed is a type this service does not consume: counted and skipped.
+	kafkatest.Produce(t, inboundkafka.SellerTopic, sellerEvent("evt-seed", "inboundshipment.InboundShipmentShipped",
+		`{"shipmentId":"shp-0","sellerId":"seller-0","nodeId":"node-0","shippedAt":"2026-10-23T08:00:00Z"}`))
 	t.Setenv("HTTP_ADDR", addr)
 	t.Setenv("SHUTDOWN_DRAIN_DELAY", "0")
 	t.Setenv("OUTBOX_RELAY_INTERVAL", "100ms")
