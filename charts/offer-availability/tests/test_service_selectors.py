@@ -34,6 +34,7 @@ BASE = [
     "--set", "kafka.brokers=kafka.example.invalid:9092",
     "--set", "config.nodeTopologyConsumerGroup=offer-availability-node-topology",
     "--set", "config.sellerInboundConsumerGroup=offer-availability-seller-inbound",
+    "--set", "config.customerReturnsConsumerGroup=offer-availability-customer-returns",
 ]
 ENABLE_EVERYTHING = BASE + [
     "--set", "autoscaling.api.enabled=true",

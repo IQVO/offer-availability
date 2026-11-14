@@ -55,7 +55,7 @@ aggregator's context map; this repository holds the contract of its own side onl
 ## Upstream: `seller-inbound` (Kafka, consumed)
 
 - **Topic and group.** `retailnetwork.seller-inbound.events`, read by a second consumer under
-  `SELLER_INBOUND_CONSUMER_GROUP` (mandatory, never defaulted; ADR 0013).
+  `SELLER_INBOUND_CONSUMER_GROUP` (mandatory, never defaulted; ADR 0013), and `retailnetwork.customer-returns.events` under `CUSTOMER_RETURNS_CONSUMER_GROUP` (ADR 0015, never defaulted).
 - **Contract.** CloudEvents types `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` (reads `sellerId`,
   `suspendedAt`), `...seller.SellerReinstated` (reads `sellerId`, `reinstatedAt`) and
   `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` (reads `sellerId`, `nodeId`,

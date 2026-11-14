@@ -85,6 +85,7 @@ The chart fails at render for: no database source, no or blank `kafka.brokers`, 
 | `kafka.brokers` | `KAFKA_BROKERS` | Required (api only). |
 | `config.nodeTopologyConsumerGroup` | `NODE_TOPOLOGY_CONSUMER_GROUP` | Required, no default; stable and service-prefixed (the kind release uses `offer-availability-node-topology`). |
 | `config.sellerInboundConsumerGroup` | `SELLER_INBOUND_CONSUMER_GROUP` | Required, no default; stable and service-prefixed (proposed `offer-availability-seller-inbound`). |
+| `config.customerReturnsConsumerGroup` | `CUSTOMER_RETURNS_CONSUMER_GROUP` | Required, no default; stable and service-prefixed (proposed `offer-availability-customer-returns`). |
 | `config.httpAddr`, `logLevel`, `outboxRelayInterval`, `outboxMaxAttempts`, `retentionInterval`, `shutdownDrainDelay` | `HTTP_ADDR`, `LOG_LEVEL`, `OUTBOX_RELAY_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `RETENTION_INTERVAL`, `SHUTDOWN_DRAIN_DELAY` | Defaults repeat the binary's; the render test checks they agree. |
 | `otel.endpoint`, `otel.serviceName`, `environment` | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `ENVIRONMENT` | Chart default endpoint `otel-collector.observability.svc.cluster.local:4317`. |
 | `mcp.httpAddr`, `a2a.httpAddr`, `a2a.agentUrl` | `MCP_ADDR`, `A2A_ADDR`, `A2A_AGENT_URL` | Keep `service.targetPort` in step with the address. |
@@ -146,6 +147,7 @@ the pod from booting (`ping postgres` / `run migrations` errors in the log, then
 | `retailnetwork.offer-availability.events` | produced by the outbox relay | aggregate id | the relay's writer: acks=all, hash balancer | All nine event types; content type `application/cloudevents+json; charset=UTF-8`. |
 | `retailnetwork.node-topology.events` | consumed | n/a | group = `NODE_TOPOLOGY_CONSUMER_GROUP` (chart: `offer-availability-node-topology`) | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`; offset committed after the handler succeeded. |
 | `retailnetwork.seller-inbound.events` | consumed | n/a | group = `SELLER_INBOUND_CONSUMER_GROUP` (chart: `offer-availability-seller-inbound`) | `SellerSuspended`, `SellerReinstated` (ADR 0013), `InboundShipmentReceived` (ADR 0014); every other type is counted and skipped; dead letters to `retailnetwork.seller-inbound.events.dlq`. |
+| `retailnetwork.customer-returns.events` | consumed | n/a | group = `CUSTOMER_RETURNS_CONSUMER_GROUP` (chart: `offer-availability-customer-returns`) | `ReturnCompleted` (ADR 0015) raises the owner listing's availability by `qtyRestockable`; every other type is counted and skipped; dead letters to `retailnetwork.customer-returns.events.dlq`. |
 | `retailnetwork.node-topology.events.dlq` | produced by the consumer | source key | the dead-letter writer | Headers `x-dlq-source-topic`, `x-dlq-source-partition`, `x-dlq-source-offset`, `x-dlq-error`, `x-dlq-failed-at`. Nothing reads it. |
 
 ## The outbox in operation
