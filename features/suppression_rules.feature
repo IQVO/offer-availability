@@ -240,6 +240,12 @@ Feature: Suppression rules from the documentation
     Then the listing "bottle@N1" is LIVE
     And the last action raised no events
 
+  Scenario: Activating an active node leaves a listing already suppressed for its suspended owner as it is
+    Given seller-inbound publishes the event "s1" SellerSuspended for seller "seller-7" at "2026-11-08T10:00:00Z"
+    When node-topology publishes the event "n1" NodeActivated for node "N1" at "2026-11-08T12:00:00Z"
+    Then the listing "bottle@N1/seller-7" is SUPPRESSED because OWNER_SUSPENDED
+    And the last action raised no events
+
   Scenario: A node event without its CloudEvents id is a validation error and changes nothing
     When node-topology publishes the event "" NodeSuspended for node "N1" at "2026-11-08T12:00:00Z"
     Then the request fails with "ErrValidation"
