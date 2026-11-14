@@ -23,8 +23,11 @@ aggregator's context map; this repository holds the contract of its own side onl
 | `delivery-promise` | downstream | Kafka (same topic) | catalogue and listing events | Conformist |
 | `order-sourcing` | downstream | Kafka (same topic) | `CatalogItemDiscontinued` and listing events | Conformist |
 | `shipping-and-tracking` | downstream | Kafka (same topic) | `CatalogItemCreated` | Conformist |
+| `pricing`, `product-content`, `shopping-cart` | downstream | Kafka (same topic) | `CatalogItemCreated`, `CatalogItemDiscontinued` | Conformist |
+| `product-discovery` | downstream | Kafka (same topic) | catalogue and listing events | Conformist |
 | `node-performance` | downstream | Kafka (same topic) | `InventoryFeedApplied` | Conformist |
-| `seller-inbound` | downstream | Kafka (same topic) | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Conformist |
+| `seller-inbound` | downstream | Kafka (same topic) | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `ListingAvailabilityChanged` | Conformist |
+| `seller-inbound` | upstream, consumed | Kafka `retailnetwork.seller-inbound.events` | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | Conformist |
 | Network merchandising, storefronts | callers | REST | catalogue and listing routes | UI / Open Host Service |
 | Agents | callers | MCP, A2A | [MCP tools](/docs/mcp/tools), [API overview](/docs/api-reference#a2a) | Open Host Service |
 
@@ -80,10 +83,12 @@ There is no call in the other direction.
 
 All consumers read `retailnetwork.offer-availability.events` ([Event catalogue](/docs/api-reference/events)). They keep
 their own read models (`delivery-promise` and `order-sourcing` an `AvailabilityView`, `vendor-connectivity` a `ListingView`
-and `CatalogPackagingView`, `shipping-and-tracking` a `CatalogDimensionsView`, `seller-inbound` a `CatalogPackagingView`,
-`node-performance` its feed-freshness measure); none calls this service on a hot path. This repository contains **no
-consumer code and no consumer-driven contract test**: the statement that these services consume these types is the
-context map's, and the only check here is `TestEventCatalogueMatchesContract` (the types in `apis/asyncapi.yaml` appear in
+and `CatalogPackagingView`, `shipping-and-tracking` a `CatalogDimensionsView`, `seller-inbound` a `CatalogPackagingView` and
+a `DemandHeatView`, `pricing` a `CatalogItemView`, `shopping-cart` a `PurchasabilityView`, `node-performance` its feed-freshness
+measure); none calls this service on a hot path. This repository contains **no consumer code for its own events and no
+consumer-driven contract test**: the consumer list (which type each sibling handles, see
+[Domain events](/docs/ddd/domain-events)) was recomputed on 2026-11-13 from each sibling's inbound Kafka handlers at
+`origin/develop`, and the only check here is `TestEventCatalogueMatchesContract` (the types in `apis/asyncapi.yaml` appear in
 ADR 0004). If a consumer is absent from a deployment, nothing in this service notices: the relay publishes regardless.
 
 ## Callers over REST, MCP and A2A

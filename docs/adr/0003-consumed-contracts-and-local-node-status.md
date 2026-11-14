@@ -137,3 +137,13 @@ the 2026-11-08 amendment ("NOT consumed yet") no longer holds.
   `sellerId`/`nodeId` goes to `retailnetwork.seller-inbound.events.dlq`.
 - **Same topic, group, inbox and transaction rule** as the seller status events:
   no new consumer group, topic or environment variable.
+
+## Addendum 2026-11-13: current state
+
+- The outbound-events row of the Relationships table names five Conformists. On 2026-11-13 the topic
+  `retailnetwork.offer-availability.events` is also read by `seller-inbound`, `pricing`, `product-content`, `product-discovery`
+  and `shopping-cart` (their inbound Kafka handlers at `origin/develop`); the per-type list is in
+  `docs/docs/ddd/domain-events.md`.
+- This service also consumes `retailnetwork.seller-inbound.events` (`internal/adapters/inbound/kafka/seller_consumer.go`,
+  `received_consumer.go`), added by [ADR 0013](./0013-seller-status-and-received-stock-drive-owner-listings.md) and
+  [ADR 0014](./0014-received-stock-creates-owner-listings.md).

@@ -253,3 +253,13 @@ a pure function so the ordering rules (A13) are mutation-tested.
   same way (a `SUSPENDED` owner starts the listing `SUPPRESSED(OWNER_SUSPENDED)`
   unless a higher cause applies). A14's `NodeActivated` restore therefore leaves a
   listing whose owner is suspended at `OWNER_SUSPENDED`.
+
+## Addendum 2026-11-13: current state
+
+- The Listing uniqueness rule above is now one listing per (`catalogItemId`, `nodeId`, `ownerRef`), not per (`catalogItemId`,
+  `nodeId`): `CreateListing.pairTaken` (`internal/application/usecases/listings.go`) looks the pair up by item and node for an
+  operator-owned listing and by item, node and owner for a seller's, and the database key is `listings_item_node_owner_key`
+  (migration `0002_catalog_packaging_and_listing_owner`). Changed by [ADR 0006](./0006-catalog-gtin-packaging-and-listing-owner.md), item 8.
+- A suppressed listing can also carry the reason `OWNER_SUSPENDED` (`listing.ReasonOwnerSuspended` in
+  `internal/domain/listing/listing.go`), raised by `internal/application/usecases/seller_events.go` when seller-inbound suspends
+  the owner. Added by [ADR 0013](./0013-seller-status-and-received-stock-drive-owner-listings.md); the precedence is A25 above.
