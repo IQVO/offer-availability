@@ -9,6 +9,7 @@ package main
 // of the new consumer.
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -70,11 +71,15 @@ func returnsFlow(t *testing.T, s *service, w *world) {
 	}
 
 	// A line whose listing does not exist is counted and skipped; a redelivery
-	// of the first event changes nothing (the inbox).
+	// of the first event changes nothing (the inbox). The unfed item is
+	// registered as a catalog item but never listed: an unknown LISTING is
+	// what the skip path proves (the mug, by contrast, was listed by the
+	// seller flow earlier in this run and would legitimately restock).
+	unfed := str(s.write(http.MethodPost, "/catalog-items", `{"title":"Bamboo cutlery set","lengthMm":220,"widthMm":60,"heightMm":30,"weightG":180}`, http.StatusCreated), "catalogItemId")
 	kafkatest.Produce(t, inboundkafka.CustomerReturnsTopic,
 		returnEvent("evt-ret-2", "returnauthorization.ReturnCompleted",
 			`{"authorizationId":"ret-e2e-2","outcome":"RECEIVED","nodeId":"node-a","lines":[`+
-				`{"catalogItemId":"`+w.mug+`","ownerRef":"`+seller+`","qtyRestockable":5,"qtyUnsellable":0}],`+
+				`{"catalogItemId":"`+unfed+`","ownerRef":"`+seller+`","qtyRestockable":5,"qtyUnsellable":0}],`+
 				`"receivedAt":"2026-11-14T12:30:00Z"}`),
 		returnEvent("evt-ret-1", "returnauthorization.ReturnCompleted",
 			`{"authorizationId":"ret-e2e-1","outcome":"RECEIVED","nodeId":"node-a","lines":[`+
@@ -85,7 +90,7 @@ func returnsFlow(t *testing.T, s *service, w *world) {
 	s.eventually(30*time.Second, "both return events processed", func() bool {
 		return s.count(`SELECT count(*) FROM processed_events`) == 11
 	})
-	if n := s.count(`SELECT count(*) FROM listings WHERE catalog_item_id = $1 AND owner_ref = $2`, w.mug, seller); n != 0 {
+	if n := s.count(`SELECT count(*) FROM listings WHERE catalog_item_id = $1 AND owner_ref = $2`, unfed, seller); n != 0 {
 		t.Fatalf("the skipped line created %d listings, want none", n)
 	}
 
