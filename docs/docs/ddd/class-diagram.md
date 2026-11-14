@@ -129,6 +129,7 @@ classDiagram
         <<Enumeration>>
         NODE_NOT_SELLABLE
         DISCONTINUED
+        OWNER_SUSPENDED
     }
     Listing *-- Availability
     Availability --> Basis

@@ -25,6 +25,10 @@ flowchart LR
     MER(["Network<br/>merchandising"])
     SHO(["Storefront"])
     AG(["Agents"])
+    PR["pricing<br/>Core"]
+    PC["product-content<br/>Generic"]
+    PD["product-discovery<br/>Supporting"]
+    SC["shopping-cart<br/>Supporting"]
     NF[["network-fulfillment<br/>fleet, other org"]]
 
     NT ==>|"CF, Kafka<br/>four node events"| OA
@@ -34,16 +38,22 @@ flowchart LR
     OA ==>|"CF, Kafka<br/>listing events + Discontinued"| OS
     OA ==>|"CF, Kafka<br/>CatalogItemCreated"| ST
     OA ==>|"CF, Kafka<br/>InventoryFeedApplied"| NP
-    OA ==>|"CF, Kafka<br/>pack-level events"| SI
+    OA ==>|"CF, Kafka<br/>pack-level events<br/>+ ListingAvailabilityChanged"| SI
+    SI ==>|"CF, Kafka<br/>seller status and<br/>received-stock events"| OA
+    OA ==>|"CF, Kafka<br/>CatalogItemCreated<br/>+ Discontinued"| PR
+    OA ==>|"CF, Kafka<br/>CatalogItemCreated<br/>+ Discontinued"| PC
+    OA ==>|"CF, Kafka<br/>catalogue + listing events"| PD
+    OA ==>|"CF, Kafka<br/>CatalogItemCreated<br/>+ Discontinued"| SC
     MER -->|"UI, REST<br/>catalogue and listing writes"| OA
     SHO -.->|"OHS, REST<br/>GET /catalog"| OA
     AG -.->|"OHS, MCP and A2A<br/>reads"| OA
     NF -. "Separate Ways<br/>no channel" .- OA
 ```
 
-Source: `internal/adapters/inbound/kafka/node_consumer.go` (consumed side), `internal/adapters/outbound/kafka/encoder.go`
-and `apis/asyncapi.yaml` (published side), `apis/openapi.yaml` (REST), `cmd/mcp`, `cmd/a2a`; the neighbour
-relationships are the aggregator's context map, not code in this repository.
+Source: `internal/adapters/inbound/kafka/node_consumer.go`, `seller_consumer.go` and `received_consumer.go` (consumed side),
+`internal/adapters/outbound/kafka/encoder.go` and `apis/asyncapi.yaml` (published side), `apis/openapi.yaml` (REST),
+`cmd/mcp`, `cmd/a2a`; the downstream consumers were read on 2026-11-13 from each sibling's inbound Kafka handlers at
+`origin/develop`, the other neighbour relationships are the aggregator's context map, not code in this repository.
 
 Legend: thick arrows are Kafka events and point from the publisher to the consumer; the thin arrow is a REST call and
 points from the caller to the service; dotted arrows are read-only queries into this context; the dotted line without an
@@ -65,14 +75,20 @@ Omitted: Postgres and Kafka as infrastructure, and the contexts with no relation
 | `order-sourcing` (Core) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | Publisher side only |
 | `shipping-and-tracking` (Generic) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemCreated` | Publisher side only |
 | `node-performance` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `InventoryFeedApplied` | Publisher side only |
-| `seller-inbound` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Publisher side only |
+| `seller-inbound` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `ListingAvailabilityChanged` | Publisher side only |
+| `seller-inbound` | Upstream; this context is downstream | **Conformist** | Kafka `retailnetwork.seller-inbound.events`, `com.retailnetwork.partner.seller-inbound.<entity>.<Event>` | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | Consumer side yes (`internal/adapters/inbound/kafka/seller_consumer.go`, `received_consumer.go`) |
+| `pricing` (Core) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemCreated`, `CatalogItemDiscontinued` | Publisher side only |
+| `product-content` (Generic) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemCreated`, `CatalogItemDiscontinued` | Publisher side only |
+| `product-discovery` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | Publisher side only |
+| `shopping-cart` (Supporting) | This context upstream | **Conformist** | Kafka (same topic) | `CatalogItemCreated`, `CatalogItemDiscontinued` | Publisher side only |
 | Network merchandising (human) | This context upstream | **UI** | REST `POST /catalog-items`, `POST /catalog-items/{catalogItemId}/discontinuations`, packaging routes, `POST /listings` | `CreateCatalogItem`, `DiscontinueItem`, `DeclarePackLevel`, `RetirePackLevel`, `CreateListing` | Yes |
 | Storefront | This context upstream | **Open Host Service** | REST `GET /catalog`, `GET /catalog/{catalogItemId}`, `GET /listings` | `BrowseCatalog`, `GetCatalogItem`, `ListListings` | Yes |
 | Agents | This context upstream | **Open Host Service** | MCP `cmd/mcp` (four read-only tools), A2A `cmd/a2a` (skills `check_availability`, `feed_outcome`) | the read use cases | Yes |
 | `network-fulfillment` (fleet, other organisation) | none | **Separate Ways** | none | none | Not applicable |
 
-The downstream consumer lists are the aggregator's context map; this repository publishes the events and holds no consumer
-and no contract test against one ([Integration](/docs/ecosystem/integration)). The type-by-consumer table is on
+The downstream consumer lists were recomputed on 2026-11-13 from each sibling's inbound Kafka handlers at `origin/develop`;
+this repository publishes the events, holds no consumer of its own events and no contract test against a consumer
+([Integration](/docs/ecosystem/integration)). The type-by-consumer table is on
 [Domain events](/docs/ddd/domain-events).
 
 ## Notes on the patterns
@@ -95,4 +111,7 @@ and no contract test against one ([Integration](/docs/ecosystem/integration)). T
 The packaging hierarchy and the optional listing `ownerRef` came with
 [ADR 0006](/docs/adr/0006-catalog-gtin-packaging-and-listing-owner) (the realisation of the aggregator's
 [ADR 0009](https://iqvo.github.io/warehouse-docs/network/adr/0009-seller-inbound-and-case-packed-shipments)). They add
-the `seller-inbound` edge and the pack-level events to the `vendor-connectivity` edge in the table above.
+the `seller-inbound` edge and the pack-level events to the `vendor-connectivity` edge in the table above. The reverse edge,
+`seller-inbound` upstream with `SellerSuspended`, `SellerReinstated` and `InboundShipmentReceived`, came with
+[ADR 0013](/docs/adr/0013-seller-status-and-received-stock-drive-owner-listings) and
+[ADR 0014](/docs/adr/0014-received-stock-creates-owner-listings).

@@ -107,3 +107,13 @@ service exactly as before.
   consumer's local view can be keyed by GTIN and never needs a correction.
 - Dropping the old `(item, node)` constraint is irreversible for data with two
   owners: the down migration fails if two listings share an item and node.
+
+## Addendum 2026-11-13: current state
+
+- Item 5 names `POST /catalog-items/{id}/packaging/{level}:retire` and `:discontinue`. Those colon-verb routes no longer exist:
+  [ADR 0011](./0011-adopt-the-fleet-rest-api-guideline.md) replaced them with
+  `POST /catalog-items/{catalogItemId}/packaging/{level}/retirements` and `POST /catalog-items/{catalogItemId}/discontinuations`
+  (`apis/openapi.yaml`, `internal/adapters/inbound/http/handlers.go`); `TestRetiredRoutesAreGone` pins the old paths as gone.
+- The follow-up "order-sourcing seller-awareness" is done in those services: order-sourcing copies `ownerRef` from
+  `ListingCreated` and `ListingAvailabilityChanged` into its listing (`internal/adapters/inbound/kafka/handlers.go`, its ADR 0012,
+  accepted 2026-11-08) and delivery-promise keys its `AvailabilityView` by (item, node, `ownerRef`) (its ADR 0017, accepted 2026-11-08).

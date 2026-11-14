@@ -10,7 +10,8 @@ description: "The ddd-crew Bounded Context Canvas v5 for Offer and Availability:
 Following the ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas). Every message row
 is checked against the code on `develop`: routes against `apis/openapi.yaml` and
 `internal/adapters/inbound/http/handlers.go`, events against `apis/asyncapi.yaml` and the `events.go` files of
-`internal/domain`, the consumed side against `internal/adapters/inbound/kafka/node_consumer.go`.
+`internal/domain`, the consumed side against `internal/adapters/inbound/kafka/node_consumer.go`, `seller_consumer.go` and
+`received_consumer.go`.
 
 ## Canvas at a glance
 
@@ -34,12 +35,13 @@ flowchart LR
         in2(["Storefront"]):::actor
         in3["node-topology"]:::ctx
         in4(["Agents"]):::actor
+        in5["seller-inbound"]:::ctx
     end
     subgraph BC["offer-availability - Supporting - commerce tier"]
         direction TB
         purpose["<b>Purpose</b><br/>Know what the network can<br/>sell and from which node:<br/>catalogue item, one listing<br/>per item, node and owner, and<br/>the quantity each node claims,<br/>with the vendor's basis."]:::card
         roles["<b>Domain roles</b><br/>- Specification<br/>- Analysis - availability"]:::card
-        rules["<b>Business decisions</b><br/>- Sellable only while<br/>the node is ACTIVE<br/>- A feed older than the node's<br/>last applied feed is superseded<br/>- A full feed zeroes the<br/>listings it omits<br/>- The vendor's basis is<br/>kept, never re-derived"]:::card
+        rules["<b>Business decisions</b><br/>- Sellable only while<br/>the node is ACTIVE and<br/>the owner is not suspended<br/>- A feed older than the node's<br/>last applied feed is superseded<br/>- A full feed zeroes the<br/>listings it omits<br/>- The vendor's basis is<br/>kept, never re-derived"]:::card
         purpose ~~~ roles ~~~ rules
     end
     in0 -->|"cmd - REST<br/>ApplyInventoryFeed"| BC
@@ -47,15 +49,18 @@ flowchart LR
     in2 -.->|"qry - REST<br/>BrowseCatalog"| BC
     in4 -.->|"qry - MCP, A2A<br/>read tools and skills"| BC
     in3 ==>|"evt - Kafka<br/>NodeRegistered,<br/>NodeActivated,<br/>NodeSuspended,<br/>NodeRetired"| BC
+    in5 ==>|"evt - Kafka<br/>SellerSuspended,<br/>SellerReinstated,<br/>InboundShipmentReceived"| BC
     linkStyle 0 stroke:#1971c2,stroke-width:1.5px
     linkStyle 1 stroke:#1971c2,stroke-width:1.5px
     linkStyle 2 stroke:#2f9e44,stroke-width:1.5px
     linkStyle 3 stroke:#2f9e44,stroke-width:1.5px
     linkStyle 4 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 5 stroke:#e8590c,stroke-width:2.5px
     class BC bc
 ```
 
 Source: `apis/openapi.yaml`, `internal/adapters/inbound/http/handlers.go`, `internal/adapters/inbound/kafka/node_consumer.go`,
+`internal/adapters/inbound/kafka/seller_consumer.go`, `internal/adapters/inbound/kafka/received_consumer.go`,
 `internal/adapters/inbound/mcp/tools.go`, `internal/adapters/inbound/a2a/skills.go`.
 
 ### Outbound
@@ -74,24 +79,36 @@ flowchart LR
         out3["shipping-and-tracking"]:::ctx
         out4["node-performance"]:::ctx
         out5["seller-inbound"]:::ctx
+        out6["pricing"]:::ctx
+        out7["product-content"]:::ctx
+        out8["product-discovery"]:::ctx
+        out9["shopping-cart"]:::ctx
     end
     BC ==>|"evt - Kafka<br/>CatalogItemCreated, CatalogItemDiscontinued,<br/>ListingCreated, ListingAvailabilityChanged,<br/>ListingSuppressed, ListingRestored"| out0
     BC ==>|"evt - Kafka<br/>CatalogItemDiscontinued, ListingCreated,<br/>ListingAvailabilityChanged,<br/>ListingSuppressed, ListingRestored"| out1
     BC ==>|"evt - Kafka<br/>ListingCreated, pack-level events"| out2
     BC ==>|"evt - Kafka<br/>CatalogItemCreated"| out3
     BC ==>|"evt - Kafka<br/>InventoryFeedApplied"| out4
-    BC ==>|"evt - Kafka<br/>pack-level events"| out5
+    BC ==>|"evt - Kafka<br/>pack-level events,<br/>ListingAvailabilityChanged"| out5
+    BC ==>|"evt - Kafka<br/>CatalogItemCreated,<br/>CatalogItemDiscontinued"| out6
+    BC ==>|"evt - Kafka<br/>CatalogItemCreated,<br/>CatalogItemDiscontinued"| out7
+    BC ==>|"evt - Kafka<br/>CatalogItemCreated, CatalogItemDiscontinued,<br/>ListingCreated, ListingAvailabilityChanged,<br/>ListingSuppressed, ListingRestored"| out8
+    BC ==>|"evt - Kafka<br/>CatalogItemCreated,<br/>CatalogItemDiscontinued"| out9
     linkStyle 0 stroke:#e8590c,stroke-width:2.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
     linkStyle 2 stroke:#e8590c,stroke-width:2.5px
     linkStyle 3 stroke:#e8590c,stroke-width:2.5px
     linkStyle 4 stroke:#e8590c,stroke-width:2.5px
     linkStyle 5 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 6 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 7 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 8 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 9 stroke:#e8590c,stroke-width:2.5px
 ```
 
 Source: `apis/asyncapi.yaml`, `internal/domain/{catalog,listing,feed}/events.go`,
-`internal/adapters/outbound/kafka/encoder.go`; the consumer side of each edge is the aggregator's context map, not code
-here. The context makes no synchronous call, so the Outbound picture has events only.
+`internal/adapters/outbound/kafka/encoder.go`; the consumer side of each edge was read on 2026-11-13 from the sibling's
+inbound Kafka handlers at `origin/develop`, not from code here (see [Domain events](/docs/ddd/domain-events)). The context makes no synchronous call, so the Outbound picture has events only.
 
 ## Name
 
@@ -122,7 +139,7 @@ synchronous call here.
 
 | Role | Applies? | Evidence in the code |
 | --- | --- | --- |
-| **Specification** | **Yes, primary** | It defines what is sellable: `catalog.Item`, `listing.Listing`, the `LIVE` / `SUPPRESSED` rule tied to node status (`listing.ErrNodeNotSellable`, `listing.Listing.Restore`). |
+| **Specification** | **Yes, primary** | It defines what is sellable: `catalog.Item`, `listing.Listing`, the `LIVE` / `SUPPRESSED` rule tied to node status (`listing.ErrNodeNotSellable`, `listing.Listing.Restore`, `listing.Listing.Reconcile`), and by the owner's status (`SellerSuspended`, ADR 0013). |
 | **Analysis (availability)** | **Yes** | It turns vendor feeds into per-listing availability: monotonic `asOf` (`listing.ErrStaleAvailability`), full-feed zeroing (`listing.Listing.ZeroOut`). It does not re-derive the vendor's basis. |
 | Execution / Enforcer / Gateway | No | It enforces no deadline and no capacity, and it is not the vendor's entry point (`vendor-connectivity` is). |
 
@@ -142,18 +159,21 @@ synchronous call here.
 | `node-topology` | `NodeActivated` | Event | same topic, `...node.NodeActivated` | Conformist |
 | `node-topology` | `NodeSuspended` | Event | same topic, `...node.NodeSuspended` | Conformist |
 | `node-topology` | `NodeRetired` | Event | same topic, `...node.NodeRetired` | Conformist |
+| `seller-inbound` | `SellerSuspended` | Event | Kafka `retailnetwork.seller-inbound.events`, `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | Conformist |
+| `seller-inbound` | `SellerReinstated` | Event | same topic, `...seller.SellerReinstated` | Conformist |
+| `seller-inbound` | `InboundShipmentReceived` | Event | same topic, `...inboundshipment.InboundShipmentReceived` | Conformist |
 
 ## Outbound Communication
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| `delivery-promise`, `shipping-and-tracking` | `CatalogItemCreated` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Conformist (downstream) |
-| `delivery-promise`, `order-sourcing` | `CatalogItemDiscontinued` | Event | same topic, `...catalogitem.CatalogItemDiscontinued` | Conformist (downstream) |
+| `delivery-promise`, `pricing`, `product-content`, `product-discovery`, `shipping-and-tracking`, `shopping-cart` | `CatalogItemCreated` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Conformist (downstream) |
+| `delivery-promise`, `order-sourcing`, `pricing`, `product-content`, `product-discovery`, `shopping-cart` | `CatalogItemDiscontinued` | Event | same topic, `...catalogitem.CatalogItemDiscontinued` | Conformist (downstream) |
 | `seller-inbound`, `vendor-connectivity` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Event | same topic, `...catalogitem.CatalogItemPackagingDeclared` and `...CatalogItemPackLevelRetired` | Conformist (downstream) |
-| `delivery-promise`, `order-sourcing`, `vendor-connectivity` | `ListingCreated` | Event | same topic, `...listing.ListingCreated` | Conformist (downstream) |
-| `delivery-promise`, `order-sourcing` | `ListingAvailabilityChanged` | Event | same topic, `...listing.ListingAvailabilityChanged` | Conformist (downstream) |
-| `delivery-promise`, `order-sourcing` | `ListingSuppressed` | Event | same topic, `...listing.ListingSuppressed` | Conformist (downstream) |
-| `delivery-promise`, `order-sourcing` | `ListingRestored` | Event | same topic, `...listing.ListingRestored` | Conformist (downstream) |
+| `delivery-promise`, `order-sourcing`, `product-discovery`, `vendor-connectivity` | `ListingCreated` | Event | same topic, `...listing.ListingCreated` | Conformist (downstream) |
+| `delivery-promise`, `order-sourcing`, `product-discovery`, `seller-inbound` | `ListingAvailabilityChanged` | Event | same topic, `...listing.ListingAvailabilityChanged` | Conformist (downstream) |
+| `delivery-promise`, `order-sourcing`, `product-discovery` | `ListingSuppressed` | Event | same topic, `...listing.ListingSuppressed` | Conformist (downstream) |
+| `delivery-promise`, `order-sourcing`, `product-discovery` | `ListingRestored` | Event | same topic, `...listing.ListingRestored` | Conformist (downstream) |
 | `node-performance` | `InventoryFeedApplied` | Event | same topic, `...inventoryfeed.InventoryFeedApplied` | Conformist (downstream) |
 | (none) | none | Sync call | The service has no outbound client | none |
 
@@ -183,6 +203,10 @@ Catalog Item), **Available Quantity**, **Availability Basis** `PHYSICAL` / `THRO
    restores.
 8. **A GTIN identifies one item or pack level forever** (`catalog.ErrGtinAlreadyAssigned`); a pack level above `EACH`
    needs an active lower child level (`catalog.ErrPackLevelOrder`).
+9. **A seller's suspension also keeps its listings off the shelf.** `SellerSuspended` suppresses the seller's `LIVE`
+   listings with `OWNER_SUSPENDED` (`usecases.ApplySellerEvent`); a listing shows the highest active cause, `DISCONTINUED` >
+   `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED` (`listing.Sellability.Cause`, ADR 0013). `InboundShipmentReceived` creates the
+   seller's listing for each received item that has none on the node (`usecases.ApplyReceivedStock`, ADR 0014).
 
 ## Assumptions
 
@@ -206,7 +230,7 @@ stale lines, suppression lag after `NodeSuspended` or `NodeRetired`, and outbox 
 
 - **Feed correlation.** Whether `feedId` is `vendor-connectivity`'s transaction id is that service's decision; this
   context accepts any well-formed id and treats a re-sent `FAILED` id as a retry.
-- **Consumers are unverified here.** The downstream list is the context map's; no consumer-driven contract test exists in
-  this repository ([Integration](/docs/ecosystem/integration)).
+- **No contract test against the consumers.** The downstream list was recomputed on 2026-11-13 from each consumer's inbound
+  Kafka handlers; no consumer-driven contract test exists in this repository ([Integration](/docs/ecosystem/integration)).
 - **Atomic application at volume.** A full feed touches every listing of a node in one transaction under the node's mark
   lock; there is no measured throughput figure.

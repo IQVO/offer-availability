@@ -36,20 +36,24 @@ Source: `internal/adapters/kafka/cloudevents/cloudevents.go` (`Type`, `DataSchem
 
 ## Published
 
-| Event | Full `type` | Subject / key | Raised by (use case) | Consumers (per the context map) |
+| Event | Full `type` | Subject / key | Raised by (use case) | Consumers (their inbound Kafka handlers) |
 | --- | --- | --- | --- | --- |
-| `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `catalogItemId` | `CreateCatalogItem` | `delivery-promise`, `shipping-and-tracking` |
-| `CatalogItemDiscontinued` | `...catalogitem.CatalogItemDiscontinued` | `catalogItemId` | `DiscontinueItem` | `delivery-promise`, `order-sourcing` |
+| `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `catalogItemId` | `CreateCatalogItem` | `delivery-promise`, `pricing`, `product-content`, `product-discovery`, `shipping-and-tracking`, `shopping-cart` |
+| `CatalogItemDiscontinued` | `...catalogitem.CatalogItemDiscontinued` | `catalogItemId` | `DiscontinueItem` | `delivery-promise`, `order-sourcing`, `pricing`, `product-content`, `product-discovery`, `shopping-cart` |
 | `CatalogItemPackagingDeclared` | `...catalogitem.CatalogItemPackagingDeclared` | `catalogItemId` | `DeclarePackLevel` | `seller-inbound`, `vendor-connectivity` |
 | `CatalogItemPackLevelRetired` | `...catalogitem.CatalogItemPackLevelRetired` | `catalogItemId` | `RetirePackLevel`, `DeclarePackLevel` (replacing a level) | `seller-inbound`, `vendor-connectivity` |
-| `ListingCreated` | `...listing.ListingCreated` | `listingId` | `CreateListing` | `delivery-promise`, `order-sourcing`, `vendor-connectivity` |
-| `ListingAvailabilityChanged` | `...listing.ListingAvailabilityChanged` | `listingId` | `ApplyInventoryFeed` (per changed listing, zeroed ones included) | `delivery-promise`, `order-sourcing` |
-| `ListingSuppressed` | `...listing.ListingSuppressed` | `listingId` | `CreateListing` (starts suppressed), `DiscontinueItem`, `ApplyNodeEvent` | `delivery-promise`, `order-sourcing` |
-| `ListingRestored` | `...listing.ListingRestored` | `listingId` | `ApplyNodeEvent` | `delivery-promise`, `order-sourcing` |
+| `ListingCreated` | `...listing.ListingCreated` | `listingId` | `CreateListing`, `ApplyReceivedStock` | `delivery-promise`, `order-sourcing`, `product-discovery`, `vendor-connectivity` |
+| `ListingAvailabilityChanged` | `...listing.ListingAvailabilityChanged` | `listingId` | `ApplyInventoryFeed` (per changed listing, zeroed ones included) | `delivery-promise`, `order-sourcing`, `product-discovery`, `seller-inbound` |
+| `ListingSuppressed` | `...listing.ListingSuppressed` | `listingId` | `CreateListing` and `ApplyReceivedStock` (start suppressed), `DiscontinueItem`, `ApplyNodeEvent`, `ApplySellerEvent` | `delivery-promise`, `order-sourcing`, `product-discovery` |
+| `ListingRestored` | `...listing.ListingRestored` | `listingId` | `ApplyNodeEvent`, `ApplySellerEvent` | `delivery-promise`, `order-sourcing`, `product-discovery` |
 | `InventoryFeedApplied` | `...inventoryfeed.InventoryFeedApplied` | `feedId` | `ApplyInventoryFeed` (feed reaches `APPLIED`) | `node-performance` |
 
 Source: `internal/domain/{catalog,listing,feed}/events.go` (types), `internal/application/usecases` (producers),
-`apis/asyncapi.yaml`. This repository holds no consumer code, so the consumer column is the aggregator's claim.
+`apis/asyncapi.yaml`. This repository holds no consumer code for these events. The consumer column was recomputed on
+2026-11-13 from each sibling's inbound Kafka handlers at `origin/develop` (`delivery-promise` `dispatch.go`, `order-sourcing`
+`handlers.go`, `pricing`, `product-content` and `product-discovery` `offer_availability.go`, `shipping-and-tracking` and
+`shopping-cart` `handlers.go`, `seller-inbound` `consumers.go`, `vendor-connectivity` `consumers.go` and
+`inbound_consumers.go`, `node-performance` `handlers.go`); no contract test here pins it.
 
 ### Data fields
 
@@ -101,7 +105,8 @@ never deleted, so shipments in flight still validate.
 | `asOf` | string (date-time) | The instant the number is true for; strictly increasing per listing. |
 | `feedId` | string | The feed that carried the number. |
 
-**`ListingSuppressed`**: `listingId`, `nodeId` and `reason`, which is `NODE_NOT_SELLABLE` or `DISCONTINUED`.
+**`ListingSuppressed`**: `listingId`, `nodeId` and `reason`, which is `NODE_NOT_SELLABLE`, `DISCONTINUED` or `OWNER_SUSPENDED`
+(the highest active cause, ADR 0013).
 
 **`ListingRestored`**: `listingId` and `nodeId`.
 
