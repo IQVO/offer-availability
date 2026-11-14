@@ -385,4 +385,5 @@ func initializeScenario(sc *godog.ScenarioContext) {
 
 	registerHTTPSteps(sc, w)
 	registerPackagingSteps(sc, w)
+	registerRuleSteps(sc, w)
 }
