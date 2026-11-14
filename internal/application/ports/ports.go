@@ -202,3 +202,22 @@ type FeedMetrics interface {
 type ReceivedStockMetrics interface {
 	ReceivedSkipped(ctx context.Context, eventType, reason string)
 }
+
+// ReturnRestockMetrics counts what ApplyReturnCompletion acknowledged without
+// effect (ADR 0015), on the counter availability.customer_returns_events.ignored
+// by full CloudEvents type and reason. The use case calls it once per skip,
+// after its unit of work committed (a retried attempt or a redelivered id never
+// counts twice):
+//
+//   - "lines_absent": the event carries no `lines`, one per event;
+//   - "nothing_restockable": one line with qtyRestockable <= 0 (the unsellable
+//     units never touch a listing);
+//   - "item_absent": one line without a usable catalogItemId;
+//   - "listing_unknown": one line whose listing of (catalogItemId, nodeId,
+//     ownerRef) does not exist.
+//
+// The implementation lives in internal/adapters/outbound/telemetry; a nil
+// Deps.ReturnMetrics records nothing.
+type ReturnRestockMetrics interface {
+	ReturnSkipped(ctx context.Context, eventType, reason string)
+}

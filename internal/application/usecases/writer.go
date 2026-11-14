@@ -40,6 +40,9 @@ type Deps struct {
 	// ReceivedMetrics counts the received-stock skips of ApplyReceivedStock
 	// (ADR 0014); nil records nothing.
 	ReceivedMetrics ports.ReceivedStockMetrics
+	// ReturnMetrics counts the return-restock skips of ApplyReturnCompletion
+	// (ADR 0015); nil records nothing.
+	ReturnMetrics ports.ReturnRestockMetrics
 	// FeedChunkSize caps how many changed listings and outbox events one
 	// batch write carries while a feed settles. A full feed can touch every
 	// listing of a node, so the settle loop writes in batches of at most this
@@ -85,6 +88,16 @@ func (d Deps) receivedMetrics() ports.ReceivedStockMetrics {
 }
 
 func (noMetrics) ReceivedSkipped(context.Context, string, string) {}
+
+// returnMetrics returns the configured ReturnRestockMetrics or a no-op.
+func (d Deps) returnMetrics() ports.ReturnRestockMetrics {
+	if d.ReturnMetrics != nil {
+		return d.ReturnMetrics
+	}
+	return noMetrics{}
+}
+
+func (noMetrics) ReturnSkipped(context.Context, string, string) {}
 
 // writer is what every command embeds.
 type writer struct{ Deps }
