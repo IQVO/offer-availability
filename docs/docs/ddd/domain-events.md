@@ -176,6 +176,15 @@ Three more come from `seller-inbound` on `retailnetwork.seller-inbound.events` (
 on that topic is counted in `availability.seller_events.ignored` (`reason=type_not_consumed`) and skipped; dead letters go
 to `retailnetwork.seller-inbound.events.dlq`.
 
+One comes from `customer-returns` on `retailnetwork.customer-returns.events` (tier `commerce`, entity
+`returnauthorization`), read by a third consumer under `CUSTOMER_RETURNS_CONSUMER_GROUP` (ADR 0015). Every other type on
+that topic is counted in `availability.customer_returns_events.ignored` (`reason=type_not_consumed`) and skipped; dead
+letters go to `retailnetwork.customer-returns.events.dlq`.
+
+| Event | Full `type` | Fields used | What this context does |
+| --- | --- | --- | --- |
+| `ReturnCompleted` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `authorizationId`, `nodeId`, `receivedAt`, `lines[].{catalogItemId, ownerRef, qtyRestockable, qtyUnsellable}` | Adds each line's `qtyRestockable` to the availability of the listing of `(catalogItemId, nodeId, ownerRef)` (`Restock`, one `ListingAvailabilityChanged` per line, basis and state untouched); `qtyUnsellable` never touches a listing. |
+
 | Event | Full `type` | Fields used | What this context does |
 | --- | --- | --- | --- |
 | `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `sellerId`, `suspendedAt` | Sets the seller `SUSPENDED` in `seller_status_view`; then `Suppress(OWNER_SUSPENDED)` on every `LIVE` listing the seller owns (a listing already suppressed keeps its higher reason). |

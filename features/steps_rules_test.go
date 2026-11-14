@@ -19,24 +19,32 @@ import (
 )
 
 // This file holds the vocabulary of the documentation-derived scenarios
-// (catalog_rules, feed_rules, suppression_rules, received_stock_rules and
-// http_rules .feature): rules from ADR 0002, 0003, 0013 and 0014 and the
-// network pack's use-cases and aggregate canvas that no earlier scenario pins.
+// (catalog_rules, feed_rules, suppression_rules, received_stock_rules,
+// returns_restock_rules and http_rules .feature): rules from ADR 0002, 0003,
+// 0013, 0014 and 0015 and the network pack's use-cases and aggregate canvas
+// that no earlier scenario pins.
 
 // rulesState is what the rules steps remember across the steps of a scenario.
 type rulesState struct {
 	received usecases.ReceivedStockResult
-	skips    []string // the reasons ReceivedSkipped counted, in order
+	returns  usecases.ReturnCompletionResult
+	skips    []string // the reasons ReceivedSkipped/ReturnSkipped counted, in order
 }
 
-// skipRecorder is the ReceivedStockMetrics double: it remembers every count.
+// skipRecorder is the ReceivedStockMetrics and ReturnRestockMetrics double: it
+// remembers every count.
 type skipRecorder struct{ st *rulesState }
 
 func (r skipRecorder) ReceivedSkipped(_ context.Context, _, reason string) {
 	r.st.skips = append(r.st.skips, reason)
 }
 
+func (r skipRecorder) ReturnSkipped(_ context.Context, _, reason string) {
+	r.st.skips = append(r.st.skips, reason)
+}
+
 const sellerEventPrefix = "com.retailnetwork.partner.seller-inbound."
+const customerReturnsEventPrefix = "com.retailnetwork.commerce.customer-returns."
 
 func registerRuleSteps(sc *godog.ScenarioContext, w *world) {
 	st := &rulesState{}
@@ -44,11 +52,13 @@ func registerRuleSteps(sc *godog.ScenarioContext, w *world) {
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 		*st = rulesState{}
 		w.deps.ReceivedMetrics = skipRecorder{st}
+		w.deps.ReturnMetrics = skipRecorder{st}
 		return ctx, nil
 	})
 	registerCatalogRuleSteps(sc, w)
 	registerSellerRuleSteps(sc, w)
 	registerReceivedStockSteps(sc, w, st)
+	registerReturnRestockSteps(sc, w, st)
 	registerFeedRuleSteps(sc, w)
 }
 
@@ -175,6 +185,63 @@ func registerReceivedStockSteps(sc *godog.ScenarioContext, w *world, st *rulesSt
 		_, err := w.store.Listings().FindByItemNodeOwner(context.Background(), listing.ItemID(w.itemRef(item)), listing.NodeID(node), listing.OwnerRef(owner))
 		if !errors.Is(err, ports.ErrNotFound) {
 			return fmt.Errorf("the seller %q has a listing of %q on %q (err %w), want none", owner, item, node, err)
+		}
+		return nil
+	})
+}
+
+// ---- return restock -----------------------------------------------------------
+
+func registerReturnRestockSteps(sc *godog.ScenarioContext, w *world, st *rulesState) {
+	publish := func(eventID, authorization, node, at string, lines []usecases.ReturnLine) error {
+		instant, err := time.Parse(time.RFC3339, at)
+		if err != nil {
+			return err
+		}
+		w.act()
+		st.skips = nil // the counts of the last event only
+		res, err := usecases.NewApplyReturnCompletion(w.deps).Execute(context.Background(), usecases.ReturnCompletionEvent{
+			EventID: eventID, EventType: customerReturnsEventPrefix + "returnauthorization.ReturnCompleted",
+			AuthorizationID: authorization, NodeID: listing.NodeID(node), ReceivedAt: instant,
+			LinesPresent: true, Lines: lines,
+		})
+		w.err, st.returns = err, res
+		for _, line := range lines {
+			w.aliasOwnedListings(node, string(line.OwnerRef))
+		}
+		return nil
+	}
+	sc.Step(`^customer-returns publishes the event "([^"]*)" ReturnCompleted "([^"]*)" for node "([^"]*)" received at "([^"]*)" with lines:$`,
+		func(eventID, authorization, node, at string, table *godog.Table) error {
+			var lines []usecases.ReturnLine
+			for _, row := range table.Rows[1:] {
+				var restockable, unsellable int
+				if _, err := fmt.Sscanf(row.Cells[2].Value+" "+row.Cells[3].Value, "%d %d", &restockable, &unsellable); err != nil {
+					return err
+				}
+				lines = append(lines, usecases.ReturnLine{
+					CatalogItemID: w.itemRef(row.Cells[0].Value), OwnerRef: listing.OwnerRef(row.Cells[1].Value),
+					QtyRestockable: restockable, QtyUnsellable: unsellable,
+				})
+			}
+			return publish(eventID, authorization, node, at, lines)
+		})
+
+	sc.Step(`^the return event restocked (\d+) listings? and skipped (\d+) lines?$`, func(restocked, skipped int) error {
+		r := st.returns
+		if len(r.Restocked) != restocked || len(r.Skipped) != skipped {
+			return fmt.Errorf("the event restocked %d and skipped %d, want %d/%d",
+				len(r.Restocked), len(r.Skipped), restocked, skipped)
+		}
+		return nil
+	})
+	sc.Step(`^the return lines were counted as skipped with the reasons "([^"]*)"$`, func(list string) error {
+		return sameNames(st.skips, splitNames(list))
+	})
+	sc.Step(`^no return line was counted as skipped$`, func() error { return sameNames(st.skips, nil) })
+	sc.Step(`^the return event was a duplicate$`, func() error {
+		if !st.returns.Duplicate {
+			return errors.New("the return event was applied, want it skipped as a duplicate")
 		}
 		return nil
 	})

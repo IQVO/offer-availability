@@ -66,6 +66,11 @@ func run(ctx context.Context) error {
 		return err
 	}
 	ad.deps.ReceivedMetrics = sellerMetrics
+	returnsMetrics, err := telemetry.NewCustomerReturnsEventMetrics()
+	if err != nil {
+		return err
+	}
+	ad.deps.ReturnMetrics = returnsMetrics
 	ad.deps.FeedChunkSize = cfg.feedChunkSize
 
 	readiness := newReadiness(ad.pool.Ping, cfg.brokers)
@@ -78,9 +83,10 @@ func run(ctx context.Context) error {
 	relay, stopRelay := startOutboxRelay(ad.outbox, cfg, logger)
 	consumer, stopConsumer := startNodeConsumer(usecases.NewApplyNodeEvent(ad.deps), cfg, logger)
 	sellers, stopSellers := startSellerConsumer(usecases.NewApplySellerEvent(ad.deps), usecases.NewApplyReceivedStock(ad.deps), sellerMetrics, cfg, logger)
+	returns, stopReturns := startReturnsConsumer(usecases.NewApplyReturnCompletion(ad.deps), returnsMetrics, cfg, logger)
 	janitor, stopJanitor := startJanitor(ad.retention, cfg, logger)
-	workers := []*worker{relay, consumer, sellers, janitor}
-	stops := []func(){stopRelay, stopConsumer, stopSellers, stopJanitor}
+	workers := []*worker{relay, consumer, sellers, returns, janitor}
+	stops := []func(){stopRelay, stopConsumer, stopSellers, stopReturns, stopJanitor}
 	return serveUntilSignal(ctx, logger, httpServer, readiness, cfg.drainDelay, workers, stops)
 }
 

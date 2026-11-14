@@ -52,6 +52,7 @@ func TestRealWiring(t *testing.T) {
 	t.Run("seller-inbound suspends and reinstates a seller", func(t *testing.T) { sellerFlow(t, s, &w) })
 	t.Run("Postgres rows", func(t *testing.T) { assertRows(t, s) })
 	t.Run("exact CloudEvents on the topic", func(t *testing.T) { assertTopic(t, s, w) })
+	t.Run("customer-returns restocks a closed return", func(t *testing.T) { returnsFlow(t, s, &w) })
 	t.Run("Kafka down", func(t *testing.T) { assertKafkaDown(t, s) })
 }
 

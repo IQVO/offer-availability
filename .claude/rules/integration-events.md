@@ -12,7 +12,9 @@ offer-availability PUBLISHES seven integration events to
 from `retailnetwork.node-topology.events` (ADR 0003) under the consumer group
 `NODE_TOPOLOGY_CONSUMER_GROUP`, plus three seller-inbound events from
 `retailnetwork.seller-inbound.events` (ADR 0013, ADR 0014) under
-`SELLER_INBOUND_CONSUMER_GROUP`. The topic `retailnetwork.offer-availability.analytics`
+`SELLER_INBOUND_CONSUMER_GROUP`, and one customer-returns event from
+`retailnetwork.customer-returns.events` (ADR 0015) under
+`CUSTOMER_RETURNS_CONSUMER_GROUP`. The topic `retailnetwork.offer-availability.analytics`
 is unused: no event is analytics-only. Never produce or consume a `warehouse.*` topic.
 
 ## Events: CloudEvents 1.0 is MANDATORY
@@ -91,6 +93,15 @@ and skipped (ADR 0013, ADR 0014):
 | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` |
 | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `sellerId`, `nodeId`, `received[].{catalogItemId?, gtin, qtyEaches}` (absent `received` = UNKNOWN: nothing created, `reason=received_unknown`) |
 
+From customer-returns, topic `retailnetwork.customer-returns.events`, dispatched on
+the FULL `type` (`returns_consumer.go`); every other type on the topic is counted in
+`availability.customer_returns_events.ignored` (`reason=type_not_consumed`) and
+skipped (ADR 0015):
+
+| `type` | read fields |
+| --- | --- |
+| `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `authorizationId`, `nodeId`, `receivedAt` (else CloudEvents `time`), `lines[].{catalogItemId, ownerRef, qtyRestockable, qtyUnsellable}` (each line's `qtyRestockable` is added to the owner listing; `qtyUnsellable` is never applied) |
+
 Decoding is tolerant: only these fields are read. Each event is handled by
 `usecases.ApplyNodeEvent` in ONE unit of work together with its inbox row
 (`processed_events`, keyed by the CloudEvents id), so a redelivery changes nothing.
@@ -110,7 +121,8 @@ pass `WithMaxAttempts(...)` inline (`TestOutboxRelaysPassAttemptCap`).
 ## Consumer group id and dead letters
 
 The group id comes from the mandatory env var `NODE_TOPOLOGY_CONSUMER_GROUP` (a boot
-error naming it), never a string literal (`TestKafkaConsumerGroupNeverHardcodedInline`).
+error naming it), never a string literal (`TestKafkaConsumerGroupNeverHardcodedInline`);
+`CUSTOMER_RETURNS_CONSUMER_GROUP` names the customer-returns consumer's group (ADR 0015).
 Offsets are committed after the event was handled. A transient failure is retried
 five times, then the message goes to `retailnetwork.node-topology.events.dlq`; an
 event that can never be applied goes there at once; a cancelled context is never

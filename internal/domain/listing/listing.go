@@ -257,6 +257,40 @@ func (l *Listing) ZeroOut(asOf time.Time, feedID string, now time.Time) ([]share
 	return l.ApplyAvailability(0, l.avail.Basis, asOf, feedID, now)
 }
 
+// Restock raises the available quantity by qty, the restockable units of a
+// closed return (ADR 0015), and raises ListingAvailabilityChanged. Unlike
+// ApplyAvailability the restock is a DELTA, not a snapshot: the quantity adds
+// to whatever the last feed left, and the ErrStaleAvailability guard does not
+// apply (a delta commutes with any snapshot). The basis never changes and the
+// state is not touched (A8): a SUPPRESSED listing is restocked too. The
+// provenance pair moves only forward: a restock newer than the current fact
+// stamps it with at and ref (the return authorization id); an older one keeps
+// the feed's stamp. Check order: qty > 0 and a valid pair (ErrValidation),
+// then the sum within MaxQty (ErrValidation).
+func (l *Listing) Restock(qty int, at time.Time, ref string, now time.Time) ([]shared.Event, error) {
+	if qty <= 0 {
+		return nil, shared.Invalid("a restock adds at least one unit (got %d)", qty)
+	}
+	if at.IsZero() || !shared.ValidID(ref) {
+		return nil, shared.Invalid("a restock needs its instant and the id of the return it restocks")
+	}
+	at = shared.UTC(at)
+	if l.avail.Qty > MaxQty-qty {
+		return nil, shared.Invalid("availableQty %d + %d is above %d", l.avail.Qty, qty, MaxQty)
+	}
+	if l.avail.AsOf.IsZero() || at.After(l.avail.AsOf) {
+		l.avail = Availability{Qty: l.avail.Qty + qty, Basis: l.avail.Basis, AsOf: at, FeedID: ref}
+	} else {
+		l.avail.Qty += qty
+	}
+	l.version++
+	return []shared.Event{ListingAvailabilityChanged{
+		Header:    shared.Header{Version: l.version, At: shared.UTC(now)},
+		ListingID: l.id, CatalogItemID: l.item, NodeID: l.node, OwnerRef: l.owner,
+		AvailableQty: l.avail.Qty, Basis: l.avail.Basis, AsOf: l.avail.AsOf, FeedID: l.avail.FeedID,
+	}}, nil
+}
+
 // Suppress moves LIVE -> SUPPRESSED with the reason and raises
 // ListingSuppressed. A SUPPRESSED listing may be suppressed again for a reason
 // that outranks its current one (the reason changes: OWNER_SUSPENDED ->

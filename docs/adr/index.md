@@ -28,5 +28,6 @@ The *Status* column is copied from each ADR's own `## Status` section.
 | [0012](./0012-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and complete MCP surface | Accepted (2026-11-02) |
 | [0013](./0013-seller-status-and-received-stock-drive-owner-listings.md) | Seller status and received stock drive owner listings | Accepted (2026-11-08) |
 | [0014](./0014-received-stock-creates-owner-listings.md) | Received stock creates owner listings | Accepted (2026-11-09) |
+| [0015](./0015-return-completions-restock-owner-listings.md) | Return completions restock owner listings | Accepted (2026-11-14) |
 
 Superseded in part: 0013's "Rule 8 is blocked on the producer payload" by [0014](./0014-received-stock-creates-owner-listings.md).

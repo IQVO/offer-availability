@@ -20,7 +20,7 @@ func quietLogger() (*slog.Logger, *bytes.Buffer) {
 
 var valid = map[string]string{
 	"DATABASE_URL": "postgres://u:p@h/db", "KAFKA_BROKERS": "a:9092", "NODE_TOPOLOGY_CONSUMER_GROUP": "offer-availability",
-	"SELLER_INBOUND_CONSUMER_GROUP": "offer-availability-seller",
+	"SELLER_INBOUND_CONSUMER_GROUP": "offer-availability-seller", "CUSTOMER_RETURNS_CONSUMER_GROUP": "offer-availability-returns",
 }
 
 func with(over map[string]string) map[string]string {
@@ -44,6 +44,7 @@ func TestLoadConfigNamesTheMissingVariable(t *testing.T) {
 		"brokers":  {"KAFKA_BROKERS", ErrNoBrokers},
 		"group":    {"NODE_TOPOLOGY_CONSUMER_GROUP", ErrNoConsumerGroup},
 		"seller":   {"SELLER_INBOUND_CONSUMER_GROUP", ErrNoSellerConsumerGroup},
+		"returns":  {"CUSTOMER_RETURNS_CONSUMER_GROUP", ErrNoReturnsConsumerGroup},
 	} {
 		t.Run(name, func(t *testing.T) {
 			m := with(nil)
@@ -55,7 +56,7 @@ func TestLoadConfigNamesTheMissingVariable(t *testing.T) {
 		})
 	}
 	// A blank value is as missing as an absent one.
-	for k, blank := range map[string]string{"DATABASE_URL": "", "KAFKA_BROKERS": " , ", "NODE_TOPOLOGY_CONSUMER_GROUP": "   ", "SELLER_INBOUND_CONSUMER_GROUP": " "} {
+	for k, blank := range map[string]string{"DATABASE_URL": "", "KAFKA_BROKERS": " , ", "NODE_TOPOLOGY_CONSUMER_GROUP": "   ", "SELLER_INBOUND_CONSUMER_GROUP": " ", "CUSTOMER_RETURNS_CONSUMER_GROUP": "  "} {
 		if _, err := loadConfig(env(with(map[string]string{k: blank})), logger); err == nil {
 			t.Errorf("a blank %s is accepted", k)
 		}
@@ -70,7 +71,7 @@ func TestLoadConfigDefaults(t *testing.T) {
 	}
 	want := config{
 		databaseURL: "postgres://u:p@h/db", migrationsURL: "postgres://u:p@h/db", brokers: "a:9092", nodeGroup: "offer-availability",
-		sellerGroup: "offer-availability-seller", addr: ":8080", relayInterval: time.Second, maxAttempts: 20, feedChunkSize: 500, drainDelay: 5 * time.Second, retention: time.Hour,
+		sellerGroup: "offer-availability-seller", returnsGroup: "offer-availability-returns", addr: ":8080", relayInterval: time.Second, maxAttempts: 20, feedChunkSize: 500, drainDelay: 5 * time.Second, retention: time.Hour,
 	}
 	if cfg != want {
 		t.Fatalf("defaults = %+v, want %+v", cfg, want)
@@ -86,14 +87,14 @@ func TestLoadConfigOverrides(t *testing.T) {
 		"KAFKA_BROKERS": " a:1 , ,b:2 ", "HTTP_ADDR": ":9000", "OUTBOX_RELAY_INTERVAL": "250ms", "OUTBOX_MAX_ATTEMPTS": "0",
 		"FEED_APPLY_CHUNK_SIZE": "250",
 		"SHUTDOWN_DRAIN_DELAY":  "0", "RETENTION_INTERVAL": "5m", "MIGRATIONS_DATABASE_URL": "postgres://direct/db", "NODE_TOPOLOGY_CONSUMER_GROUP": " grp ",
-		"SELLER_INBOUND_CONSUMER_GROUP": " sgrp ",
+		"SELLER_INBOUND_CONSUMER_GROUP": " sgrp ", "CUSTOMER_RETURNS_CONSUMER_GROUP": " rgrp ",
 	})), logger)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := config{
 		databaseURL: "postgres://u:p@h/db", migrationsURL: "postgres://direct/db", brokers: "a:1,b:2", nodeGroup: "grp",
-		sellerGroup: "sgrp", addr: ":9000", relayInterval: 250 * time.Millisecond, maxAttempts: 0, feedChunkSize: 250, drainDelay: 0, retention: 5 * time.Minute,
+		sellerGroup: "sgrp", returnsGroup: "rgrp", addr: ":9000", relayInterval: 250 * time.Millisecond, maxAttempts: 0, feedChunkSize: 250, drainDelay: 0, retention: 5 * time.Minute,
 	}
 	if cfg != want {
 		t.Fatalf("overrides = %+v, want %+v", cfg, want)

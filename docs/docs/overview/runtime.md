@@ -12,6 +12,7 @@ no alternative runtime and no log sink.
 | `KAFKA_BROKERS` | required | Comma-separated `host:port` list (relay, consumer, `/readyz`). A boot error names it when unset or blank. |
 | `NODE_TOPOLOGY_CONSUMER_GROUP` | required | Consumer group id of the node-topology consumer. A boot error names it when unset or blank; there is no default, so a local process cannot join a live cluster's group by accident. |
 | `SELLER_INBOUND_CONSUMER_GROUP` | required | Consumer group id of the seller-inbound consumer (ADR 0013); same rules. |
+| `CUSTOMER_RETURNS_CONSUMER_GROUP` | required | Consumer group id of the customer-returns consumer (ADR 0015); same rules. |
 | `HTTP_ADDR` | `:8080` | Listen address. |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | Poll interval of the relay (Go duration or seconds). |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | Failures before the relay excludes a row; `0` = unlimited (ADR 0005). |
@@ -64,6 +65,9 @@ Room for the whole sequence: 5 + 10 + 10 s, so a pod needs a termination grace o
 
 ## The consumer in operation
 
+- `retailnetwork.customer-returns.events` is read under `CUSTOMER_RETURNS_CONSUMER_GROUP`
+  the same way (ADR 0015): `ReturnCompleted` adds each line's `qtyRestockable` to
+  the owner listing at the node; unsellable units never touch a listing.
 - `retailnetwork.seller-inbound.events` is read under `SELLER_INBOUND_CONSUMER_GROUP`
   the same way (ADR 0013): `SellerSuspended` and `SellerReinstated` are applied, and
   `InboundShipmentReceived` creates the seller's listings of the received stock
@@ -96,6 +100,7 @@ capabilities dropped and the `RuntimeDefault` seccomp profile; `/healthz` backs 
 | `kafka.brokers` | `KAFKA_BROKERS` | Required. |
 | `config.nodeTopologyConsumerGroup` | `NODE_TOPOLOGY_CONSUMER_GROUP` | Required, no default; stable and service-prefixed. |
 | `config.sellerInboundConsumerGroup` | `SELLER_INBOUND_CONSUMER_GROUP` | Required, no default; stable and service-prefixed. |
+| `config.customerReturnsConsumerGroup` | `CUSTOMER_RETURNS_CONSUMER_GROUP` | Required, no default; stable and service-prefixed (proposed `offer-availability-customer-returns`). |
 | `otel.endpoint`, `otel.serviceName` (`<name>-mcp` for the mcp component, `<name>-a2a` for the a2a component), `image.tag` or appVersion, `environment` | `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `SERVICE_VERSION`, `ENVIRONMENT` | `otel.enabled=false` renders no `OTEL_*` env; `extraEnv` may not set these four. |
 | `config.httpAddr`, `logLevel`, `outboxRelayInterval`, `outboxMaxAttempts`, `retentionInterval`, `shutdownDrainDelay` | `HTTP_ADDR`, `LOG_LEVEL`, `OUTBOX_RELAY_INTERVAL`, `OUTBOX_MAX_ATTEMPTS`, `RETENTION_INTERVAL`, `SHUTDOWN_DRAIN_DELAY` | Defaults repeat the binary's; the render test checks they agree. |
 

@@ -8,6 +8,7 @@ kafka:
 config:
   nodeTopologyConsumerGroup: "offer-availability-node-topology"
   sellerInboundConsumerGroup: "offer-availability-seller-inbound"
+  customerReturnsConsumerGroup: "offer-availability-customer-returns"
 gatewayApi:
   enabled: true
   parentRefs:
