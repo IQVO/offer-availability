@@ -123,6 +123,7 @@ func registerSellerRuleSteps(sc *godog.ScenarioContext, w *world) {
 func registerReceivedStockSteps(sc *godog.ScenarioContext, w *world, st *rulesState) {
 	publish := func(eventID, seller, node string, present bool, lines []usecases.ReceivedLine) error {
 		w.act()
+		st.skips = nil // the counts of the last event only
 		res, err := usecases.NewApplyReceivedStock(w.deps).Execute(context.Background(), usecases.ReceivedStockEvent{
 			EventID: eventID, EventType: sellerEventPrefix + "inboundshipment.InboundShipmentReceived", ShipmentID: "shp-1",
 			SellerID: listing.OwnerRef(seller), NodeID: listing.NodeID(node), ReceivedPresent: present, Received: lines,
@@ -167,6 +168,13 @@ func registerReceivedStockSteps(sc *godog.ScenarioContext, w *world, st *rulesSt
 	sc.Step(`^the received event carried no received list$`, func() error {
 		if !st.received.Unknown {
 			return errors.New("the event carried a received list")
+		}
+		return nil
+	})
+	sc.Step(`^there is no listing of "([^"]*)" on node "([^"]*)" owned by "([^"]*)"$`, func(item, node, owner string) error {
+		_, err := w.store.Listings().FindByItemNodeOwner(context.Background(), listing.ItemID(w.itemRef(item)), listing.NodeID(node), listing.OwnerRef(owner))
+		if !errors.Is(err, ports.ErrNotFound) {
+			return fmt.Errorf("the seller %q has a listing of %q on %q (err %v), want none", owner, item, node, err)
 		}
 		return nil
 	})
