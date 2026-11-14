@@ -52,7 +52,10 @@ func returnsFlow(t *testing.T, s *service, w *world) {
 
 	// The restockable units raise the owner listing; the unsellable one never
 	// touches it (ADR 0015). The never-fed listing keeps basis UNKNOWN and
-	// stamps the pair with the return's instant and authorization id.
+	// stamps the pair with the return's instant and authorization id. The
+	// outbox assertion is a DELTA: the earlier flows of this same run have
+	// raised their own availability events.
+	restockBase := s.count(`SELECT count(*) FROM outbox_events WHERE event_type = 'com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged'`)
 	kafkatest.Produce(t, inboundkafka.CustomerReturnsTopic, returnEvent("evt-ret-1", "returnauthorization.ReturnCompleted",
 		`{"authorizationId":"ret-e2e-1","outcome":"RECEIVED","nodeId":"node-a","lines":[`+
 			`{"catalogItemId":"`+w.napkin+`","ownerRef":"`+seller+`","qtyRestockable":2,"qtyUnsellable":1}],`+
@@ -62,7 +65,7 @@ func returnsFlow(t *testing.T, s *service, w *world) {
 	if av["basis"] != "UNKNOWN" || av["asOf"] != "2026-11-14T12:00:00Z" || av["feedId"] != "ret-e2e-1" {
 		t.Fatalf("restocked availability = %v", av)
 	}
-	if n := s.count(`SELECT count(*) FROM outbox_events WHERE event_type = 'com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged'`); n != 1 {
+	if n := s.count(`SELECT count(*) FROM outbox_events WHERE event_type = 'com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged'`) - restockBase; n != 1 {
 		t.Fatalf("the restock raised %d ListingAvailabilityChanged events, want 1", n)
 	}
 
