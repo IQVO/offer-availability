@@ -174,7 +174,7 @@ func registerReceivedStockSteps(sc *godog.ScenarioContext, w *world, st *rulesSt
 	sc.Step(`^there is no listing of "([^"]*)" on node "([^"]*)" owned by "([^"]*)"$`, func(item, node, owner string) error {
 		_, err := w.store.Listings().FindByItemNodeOwner(context.Background(), listing.ItemID(w.itemRef(item)), listing.NodeID(node), listing.OwnerRef(owner))
 		if !errors.Is(err, ports.ErrNotFound) {
-			return fmt.Errorf("the seller %q has a listing of %q on %q (err %v), want none", owner, item, node, err)
+			return fmt.Errorf("the seller %q has a listing of %q on %q (err %w), want none", owner, item, node, err)
 		}
 		return nil
 	})
@@ -226,7 +226,7 @@ func registerFeedRuleSteps(sc *godog.ScenarioContext, w *world) {
 	sc.Step(`^the feed "([^"]*)" was never stored$`, func(id string) error {
 		_, err := usecases.NewGetInventoryFeed(w.deps.Feeds).Execute(context.Background(), feed.ID(id))
 		if !errors.Is(err, ports.ErrNotFound) {
-			return fmt.Errorf("feed %q is stored (err %v), want it never recorded", id, err)
+			return fmt.Errorf("feed %q is stored (err %w), want it never recorded", id, err)
 		}
 		return nil
 	})
