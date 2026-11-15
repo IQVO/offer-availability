@@ -27,8 +27,15 @@ unleash:
     # differs. See HARNESS.md's mutation-testing section for the
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
-    # Measured 2026-10-23 with gremlins v0.6.0, one run per package under
-    # internal/domain: catalog 14/14, feed 67/67, listing 37/37, nodestatus 15/15,
-    # shared 31/31 killed (efficacy 100%, mutant coverage 100% everywhere).
-    efficacy: "90"
-    mutant-coverage: "90"
+    # Measured 2026-11-15 with gremlins v0.6.0 (`make mutation-full`, then the CI-equivalent
+    # `make mutation` per package): catalog 94 killed + 1 lived of 95, feed 67/67,
+    # listing 56/56, nodestatus 15/15, sellerstatus 8/8, shared 187/187 (428 mutants);
+    # mutator coverage 100% everywhere, efficacy 100% except catalog (98.95%). The one
+    # survivor, catalog/packaging.go:195:8, is an equivalent mutant (see MUTATION.md), so
+    # efficacy is 98, the highest integer strictly below the lowest package; 99 is
+    # not reachable without silencing a mutant.
+    # The values are plain integers ON PURPOSE: gremlins v0.6.0 reads them with a
+    # float64/int type assertion, so a quoted string ("98") is silently read as 0
+    # and the gate never fails.
+    efficacy: 98
+    mutant-coverage: 99
