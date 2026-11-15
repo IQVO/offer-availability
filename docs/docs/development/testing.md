@@ -7,7 +7,7 @@ sidebar_position: 1
 
 # Testing
 
-The test pyramid of `offer-availability` as it is in the repository: unit tests per layer, 64 godog scenarios, a shared
+The test pyramid of `offer-availability` as it is in the repository: unit tests per layer, 233 godog scenarios (190 definitions), a shared
 repository contract, testcontainers integration tests, architecture fitness tests and mutation testing on the domain.
 Docker is needed only for `make integration`; every other target runs offline.
 
@@ -29,17 +29,26 @@ Nine of the `*_test.go` files carry the `integration` build tag; everything else
 
 ## Acceptance features
 
-Eight feature files, 64 scenarios, run by `features/features_test.go` (`TestFeatures`) against the REST handlers wired to
-the in-memory adapters (`features/world_test.go`); no database or broker is needed.
+Fourteen feature files, **190 scenario definitions** (`git grep -c -E "^[[:space:]]*Scenario" -- features`) that the runner
+executes as **233 scenarios** because the Examples rows of the Scenario Outlines expand (the
+`233 scenarios (233 passed)` line of `go test ./features -run TestFeatures -count=1 -v`). They are run by
+`features/features_test.go` (`TestFeatures`, `Strict: true`) against the REST handlers wired to the in-memory adapters
+(`features/world_test.go`); no database or broker is needed.
 
-| File | Scenarios | Covers |
+| File | Definitions | Covers |
 | --- | --- | --- |
-| `features/http_api.feature` | 18 | Routes, status codes, problem slugs, pagination, probes-level wire behaviour |
+| `features/suppression_rules.feature` | 33 | SuppressOnNodeUnavailable and the owner cause (ADR 0013): precedence DISCONTINUED > NODE_NOT_SELLABLE > OWNER_SUSPENDED, seller and node view ordering |
+| `features/received_stock_rules.feature` | 31 | Received seller stock creates owner listings (ADR 0013 rule 8, ADR 0014): item resolution by id or GTIN, skip counters, inbox idempotency, suppression reason at creation |
+| `features/feed_rules.feature` | 28 | InventoryFeed and FullFeedZeroing: high-water mark per node, stale lines, quantity and line bounds, first offending line, full-feed edges, event data |
+| `features/http_api.feature` | 19 | Routes, status codes, problem slugs, pagination, probes-level wire behaviour |
+| `features/http_rules.feature` | 19 | The use-case error rows through the real router: discontinue twice, FAILED and SUPERSEDED feeds, bounds, owner in the JSON views |
 | `features/inventory_feeds.feature` | 10 | Partial and full feeds, stale lines, supersede, `FAILED` and re-send, counters |
 | `features/packaging.feature` | 10 | GTINs, pack levels, immutability of `unitsPerPack`, retire, ordering |
+| `features/catalog_rules.feature` | 9 | CatalogItem bounds (dimension, weight, title), validation order, `CatalogItemCreated` fields, discontinuing |
 | `features/node_status.feature` | 8 | Node events suppressing and restoring listings, older events ignored |
 | `features/listings.feature` | 5 | Listing creation, duplicate pair, suppression at creation |
 | `features/idempotency.feature` | 5 | Replay, key reuse, missing key |
+| `features/returns_restock_rules.feature` | 5 | Return completions restock owner listings (ADR 0015) |
 | `features/catalog.feature` | 4 | Item creation, discontinuation cascade |
 | `features/ownerref.feature` | 4 | Seller-owned listings next to the operator-owned one |
 
