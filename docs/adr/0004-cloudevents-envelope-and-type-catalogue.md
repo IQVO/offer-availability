@@ -129,3 +129,20 @@ type: com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentRe
 `availability.seller_events.ignored` gains the attribute `reason`:
 `type_not_consumed` (every other type of the topic), `received_unknown`,
 `gtin_unresolved`, `item_unknown` (ADR 0014). No published type changes.
+
+## Amendment 2026-11-14: ReturnCompleted ([ADR 0015](./0015-return-completions-restock-owner-listings.md))
+
+One more consumed type, on a topic this service did not read before:
+
+```text
+type: com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted stream: events
+```
+
+| Consumed type | Topic | Fields read | Effect |
+|---|---|---|---|
+| `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `retailnetwork.customer-returns.events` | `authorizationId`, `nodeId`, `receivedAt`, `lines[].{catalogItemId, ownerRef, qtyRestockable, qtyUnsellable}` | Each line's `qtyRestockable` is added to the availability of the owner listing of `(catalogItemId, nodeId, ownerRef)` (ADR 0015) |
+
+Every other type of the topic is counted on the new counter
+`availability.customer_returns_events.ignored` (`type_not_consumed`), whose
+line-skip reasons are `nothing_restockable`, `item_absent`, `listing_unknown`
+and `lines_absent` (ADR 0015). No published type changes.

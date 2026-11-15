@@ -93,6 +93,8 @@ spec:
               value: {{ .Values.config.nodeTopologyConsumerGroup | quote }}
             - name: SELLER_INBOUND_CONSUMER_GROUP
               value: {{ .Values.config.sellerInboundConsumerGroup | quote }}
+            - name: CUSTOMER_RETURNS_CONSUMER_GROUP
+              value: {{ .Values.config.customerReturnsConsumerGroup | quote }}
             # Mandatory: the relay, the consumer and /readyz all dial Kafka.
             - name: KAFKA_BROKERS
               value: {{ .Values.kafka.brokers | quote }}

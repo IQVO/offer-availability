@@ -26,7 +26,7 @@ network-wide glossary is the aggregator's
 | **Full Feed** | A feed that is the complete truth for its node; omitted listings become zero. | `feed.Submission.Full`, `feed.Snapshot.FullUpdate` | A partial feed (`fullUpdate` false), which changes only the listings it names |
 | **Feed state** | `RECEIVED`, then `APPLIED`, `FAILED` or `SUPERSEDED`. | `feed.State` | **Submission** states in `vendor-connectivity` |
 | **Superseded** | A feed whose `asOf` is before the last applied feed of its node: stored, changes nothing. | `feed.Superseded`, `feed.StateSuperseded` | A stale *line* inside an applied feed (`staleCount`) |
-| **Listing state** | `LIVE` (sellable) or `SUPPRESSED` (not sellable; reason `NODE_NOT_SELLABLE` or `DISCONTINUED`). | `listing.State`, `listing.Reason` | A zero available quantity: a `LIVE` listing can have zero |
+| **Listing state** | `LIVE` (sellable) or `SUPPRESSED` (not sellable; reason `NODE_NOT_SELLABLE`, `DISCONTINUED` or `OWNER_SUSPENDED`). | `listing.State`, `listing.Reason` | A zero available quantity: a `LIVE` listing can have zero |
 | **Catalog item state** | `ACTIVE` or `DISCONTINUED` (final). | `catalog.State` | **Node** status `ACTIVE` (`node-topology`) |
 | **Suppression / Restoration** | Taking a listing out of sale, and putting it back; each raises an event. A `DISCONTINUED` suppression is never restored. | `listing.Listing.Suppress`, `listing.Listing.Restore` | Discontinuing a catalogue item |
 | **Suppress on node unavailable** | Policy: on `NodeSuspended` or `NodeRetired` suppress every `LIVE` listing of the node; on `NodeActivated` restore the ones suppressed for `NODE_NOT_SELLABLE`. | `usecases.ApplyNodeEvent` | `node-topology` suspending a node (the cause, not this policy) |

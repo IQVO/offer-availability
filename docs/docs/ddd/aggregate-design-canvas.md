@@ -61,8 +61,8 @@ own flag, `active`, not a state: a level goes from active to retired and never b
   ([Use cases](/docs/ddd/use-cases#discontinueitem)).
 - A new GTIN at a level that already has an active one retires the old level in the same aggregate version
   (`CatalogItemPackLevelRetired`, then `CatalogItemPackagingDeclared`).
-- Neighbours react to the events: `delivery-promise` and `order-sourcing` to `CatalogItemDiscontinued`, `seller-inbound` and
-  `vendor-connectivity` to the pack-level events.
+- Neighbours react to the events: `delivery-promise`, `order-sourcing`, `pricing`, `product-content`, `product-discovery` and
+  `shopping-cart` to `CatalogItemDiscontinued`, `seller-inbound` and `vendor-connectivity` to the pack-level events.
 
 ### 6. Handled Commands
 
@@ -109,11 +109,11 @@ node's claimed available quantity, its basis and the feed it came from. It holds
 
 ```mermaid
 stateDiagram-v2
-    [*] --> LIVE: CreateListing, node ACTIVE and item not discontinued
+    [*] --> LIVE: CreateListing, node ACTIVE, item not discontinued, owner not suspended
     [*] --> SUPPRESSED: CreateListing, otherwise
     LIVE --> SUPPRESSED: Suppress
-    SUPPRESSED --> LIVE: Restore, reason NODE_NOT_SELLABLE
-    SUPPRESSED --> SUPPRESSED: Suppress DISCONTINUED over NODE_NOT_SELLABLE
+    SUPPRESSED --> LIVE: Restore, no cause remains
+    SUPPRESSED --> SUPPRESSED: Suppress or Reconcile, a higher cause over a lower one
     note right of LIVE
         ApplyAvailability and ZeroOut change the Availability value object, not the state
     end note
@@ -123,7 +123,8 @@ Source: `internal/domain/listing/listing.go` (`listing.CreateOwned`, `Suppress`,
 
 A listing starts `SUPPRESSED` with reason `DISCONTINUED` when its item is discontinued (this wins) and `NODE_NOT_SELLABLE`
 when the node is not `ACTIVE` in the local `node_status_view`; it then raises `ListingSuppressed` right after
-`ListingCreated`. `SUPPRESSED` with `DISCONTINUED` is final: `Restore` refuses it. The database enforces the pairing of state
+`ListingCreated`. It starts `SUPPRESSED` with `OWNER_SUSPENDED` when the owner is `SUSPENDED` in `seller_status_view` and no higher
+cause holds (ADR 0013). `SUPPRESSED` with `DISCONTINUED` is final: `Restore` refuses it. The database enforces the pairing of state
 and reason (`listings_state_reason`).
 
 ### 4. Enforced Invariants
@@ -133,7 +134,7 @@ and reason (`listings_state_reason`).
 | `availableQty` is at least 0 and at most 2147483647 | `listing.Listing.ApplyAvailability` -> `listing.ErrNegativeAvailability`, `shared.ErrValidation`; `CHECK available_qty >= 0` |
 | An update whose `asOf` is not after the current one is stale and changes nothing (monotonic per listing) | `ApplyAvailability` -> `listing.ErrStaleAvailability` (inside a feed the line is skipped and counted) |
 | Only a `SUPPRESSED` listing whose reason is not `DISCONTINUED` is restored, and only when the node is sellable | `listing.Listing.Restore` -> `shared.ErrIllegalTransition`, `listing.ErrNodeNotSellable` |
-| A `LIVE` listing can be suppressed; a `NODE_NOT_SELLABLE` one can be upgraded to `DISCONTINUED`; any other repeat is refused | `listing.Listing.Suppress` -> `shared.ErrIllegalTransition` |
+| A `LIVE` listing can be suppressed; a `SUPPRESSED` one only for a reason that outranks its current one (`OWNER_SUSPENDED` < `NODE_NOT_SELLABLE` < `DISCONTINUED`); any other repeat is refused | `listing.Listing.Suppress` -> `shared.ErrIllegalTransition` |
 | One listing per (`catalogItemId`, `nodeId`, `ownerRef`); ids and owner well formed | `usecases.CreateListing` -> `listing.ErrDuplicateListing`; `listings_item_node_owner_key` |
 | The basis is one of `PHYSICAL`, `THROUGHPUT_CONSTRAINED`, `UNKNOWN` and is kept as declared | `listing.Basis.Valid` |
 
@@ -142,9 +143,14 @@ and reason (`listings_state_reason`).
 - **`SuppressOnNodeUnavailable`** (`usecases.ApplyNodeEvent`): on `NodeSuspended` or `NodeRetired` suppress every `LIVE`
   listing of the node with `NODE_NOT_SELLABLE`; on `NodeActivated` restore those suppressed for that reason. A move that is
   illegal for a listing is skipped, so a replay is a no-op.
+- **Owner status** (`usecases.ApplySellerEvent`, ADR 0013): on `SellerSuspended` suppress every `LIVE` listing the seller owns
+  with `OWNER_SUSPENDED`; on `SellerReinstated` reconcile the ones suppressed for that reason (`listing.Listing.Reconcile`):
+  restored, or handed to the remaining cause. `usecases.ApplyReceivedStock` (ADR 0014) creates the seller's listing for each
+  received item that has none on the node.
 - **Full feed zeroing** (`listing.Listing.ZeroOut`, called by `feed.InventoryFeed.Apply`): a full feed sets `availableQty` to 0
   on every other listing of the node, keeping its basis and stamping the feed's `asOf` and id. It does not suppress.
-- Neighbours: `delivery-promise` and `order-sourcing` fold every listing event into their own views.
+- Neighbours: `delivery-promise` and `order-sourcing` fold every listing event into their own views; `product-discovery` also
+  consumes the listing events, `vendor-connectivity` `ListingCreated` and `seller-inbound` `ListingAvailabilityChanged`.
 
 ### 6. Handled Commands
 

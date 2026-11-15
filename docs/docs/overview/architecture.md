@@ -56,7 +56,7 @@ flowchart TB
     NT["node-topology<br/>topic retailnetwork.node-topology.events"]
     VC["vendor-connectivity and operators<br/>REST, unauthenticated"]
     AG["agents<br/>MCP and A2A, unauthenticated"]
-    DOWN["delivery-promise, order-sourcing,<br/>vendor-connectivity, shipping-and-tracking,<br/>node-performance, seller-inbound<br/>topic retailnetwork.offer-availability.events"]
+    DOWN["delivery-promise, order-sourcing,<br/>vendor-connectivity, shipping-and-tracking,<br/>node-performance, seller-inbound,<br/>pricing, product-content, product-discovery,<br/>shopping-cart<br/>topic retailnetwork.offer-availability.events"]
     subgraph api["cmd/api (one process)"]
         direction TB
         http["inbound/http<br/>chi router, problem+json,<br/>Idempotency-Key"]

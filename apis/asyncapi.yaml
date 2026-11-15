@@ -22,6 +22,8 @@ info:
       description: Events consumed from the node-topology bounded context.
     - name: seller-inbound
       description: Events consumed from the seller-inbound bounded context.
+    - name: customer-returns
+      description: Events consumed from the customer-returns bounded context.
   description: |
     Event catalog for the **offer-availability** bounded context of the retail
     network (commerce tier): the network's catalogue items, one listing per
@@ -53,7 +55,13 @@ info:
     creates the seller's listings of the received stock (ADR 0014). Every other
     type on that topic is acknowledged and counted
     (`availability.seller_events.ignored`, reason `type_not_consumed`), never
-    applied.
+    applied. One customer-returns event (`ReturnCompleted`) from
+    `retailnetwork.customer-returns.events`, in the consumer group given by the
+    mandatory `CUSTOMER_RETURNS_CONSUMER_GROUP`, adds each line's restockable
+    quantity to the owner listing at the node (ADR 0015); every other type on
+    that topic is acknowledged and counted
+    (`availability.customer_returns_events.ignored`, reason
+    `type_not_consumed`).
 
     **Analytics.** The model names no analytics-only event for this context, so
     nothing is published on `retailnetwork.offer-availability.analytics`.
@@ -148,6 +156,17 @@ channels:
         $ref: "#/components/messages/SellerReinstated"
       InboundShipmentReceived:
         $ref: "#/components/messages/InboundShipmentReceived"
+  customerReturnsEvents:
+    address: retailnetwork.customer-returns.events
+    title: customer-returns integration topic (consumed)
+    description: |
+      Owned by customer-returns; consumed here (ADR 0015). Key = the
+      authorizationId, so one return's events arrive in order on one partition.
+      Only ReturnCompleted is used; every other type on the topic is
+      acknowledged, counted and ignored.
+    messages:
+      ReturnCompleted:
+        $ref: "#/components/messages/ReturnCompleted"
 
 operations:
   publishOfferAvailabilityEvents:
@@ -267,6 +286,35 @@ operations:
       $ref: "#/channels/sellerInboundEvents"
     messages:
       - $ref: "#/channels/sellerInboundEvents/messages/InboundShipmentReceived"
+  receiveCustomerReturnsReturnCompletions:
+    action: receive
+    title: Receive customer-returns return completions
+    summary: Restock the owner listings of what a closed return brought back.
+    description: |
+      Consumed from `retailnetwork.customer-returns.events` in the group named
+      by CUSTOMER_RETURNS_CONSUMER_GROUP (ADR 0015). For each line of a
+      ReturnCompleted the available quantity of the listing of
+      (catalogItemId, `nodeId`, ownerRef) is raised by `qtyRestockable`
+      (one ListingAvailabilityChanged each, basis and state untouched); the
+      unsellable units never touch a listing. A line with qtyRestockable <= 0
+      (`nothing_restockable`), without a usable catalogItemId (`item_absent`),
+      or whose listing does not exist (`listing_unknown`, logged at WARN) is
+      counted in `availability.customer_returns_events.ignored`, never an
+      error; an event without `lines` counts `lines_absent`. One transaction
+      per event, the CloudEvents id recorded in `processed_events`.
+
+      Failure handling mirrors the seller-inbound consumers: not a CloudEvent =
+      logged and skipped; another type of the topic = counted and skipped; a
+      ReturnCompleted with an undecodable `data`, or without a usable
+      `authorizationId`, `nodeId` or instant, is dead-lettered to
+      `retailnetwork.customer-returns.events.dlq`; any other failure is tried 5
+      times in all, then dead-lettered.
+    tags:
+      - name: customer-returns
+    channel:
+      $ref: "#/channels/customerReturnsEvents"
+    messages:
+      - $ref: "#/channels/customerReturnsEvents/messages/ReturnCompleted"
 
 components:
   messages:
@@ -720,6 +768,39 @@ components:
                 - gtin: "00614141000036"
                   qtyEaches: 6
 
+    ReturnCompleted:
+      name: ReturnCompleted
+      title: Return completed (consumed)
+      summary: customer-returns closed a return at a node.
+      description: "Consumed. `type` = `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted`. Each line's `qtyRestockable` is added to the available quantity of the listing of (catalogItemId, `nodeId`, ownerRef) — one ListingAvailabilityChanged per line, basis and state untouched. Lines with qtyRestockable <= 0, without a usable catalogItemId, or without a listing are counted in availability.customer_returns_events.ignored, never errors; `qtyUnsellable` is never applied (ADR 0015)."
+      contentType: application/cloudevents+json
+      tags:
+        - name: customer-returns
+      payload:
+        $ref: "#/components/schemas/ReturnCompletedIn"
+      examples:
+        - name: returnCompleted
+          summary: A return brought back two sellable and one unsellable unit.
+          payload:
+            specversion: "1.0"
+            id: "3f6c2a9e-8b1d-4c7a-9e55-0d2f6b7a1cb1"
+            source: "/retailnetwork/customer-returns"
+            type: "com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted"
+            subject: "ret-1"
+            time: "2026-11-14T12:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:retailnetwork:customer-returns:events:ReturnCompleted:v1"
+            data:
+              authorizationId: "ret-1"
+              outcome: "RECEIVED"
+              nodeId: "n-1"
+              lines:
+                - catalogItemId: "item-1"
+                  ownerRef: "S-1"
+                  qtyRestockable: 2
+                  qtyUnsellable: 1
+              receivedAt: "2026-11-14T12:00:00Z"
+
   schemas:
     CloudEventEnvelope:
       type: object
@@ -992,3 +1073,29 @@ components:
                   catalogItemId: { type: string, description: Omitted when the producer could not resolve it; the line then resolves by gtin. }
                   gtin: { type: string, pattern: "^[0-9]{14}$", description: The EACH GTIN when the producer resolved it, otherwise the carton GTIN. }
                   qtyEaches: { type: integer, minimum: 1, description: A line is used when > 0; the quantity is never applied as availability. }
+
+    ReturnCompletedIn:
+      type: object
+      description: Tolerant copy of the customer-returns ReturnCompleted envelope; only the fields read are declared. `outcome` is not read (ReturnCompleted is published for one outcome only).
+      required: [id, type, data]
+      properties:
+        id: { type: string }
+        type: { type: string, const: com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted }
+        data:
+          type: object
+          required: [authorizationId, nodeId]
+          properties:
+            authorizationId: { type: string, description: The return's aggregate id; the provenance stamp of the restocked availability. }
+            nodeId: { type: string, description: The node the return was received at; with catalogItemId and ownerRef it names the listing restocked. }
+            receivedAt: { type: string, format: date-time, description: The restock instant; the CloudEvents time is used when absent. }
+            lines:
+              type: array
+              description: The outcome per item. Absent counts lines_absent and restocks nothing.
+              items:
+                type: object
+                required: [catalogItemId, qtyRestockable, qtyUnsellable]
+                properties:
+                  catalogItemId: { type: string, description: The catalogue item the line returned. }
+                  ownerRef: { type: string, description: The seller whose stock was returned; omitted or empty means the operator-owned listing. }
+                  qtyRestockable: { type: integer, minimum: 0, description: Units the node can sell again; added to the listing's available quantity. }
+                  qtyUnsellable: { type: integer, minimum: 0, description: Units that cannot be sold again; never applied to any listing. }

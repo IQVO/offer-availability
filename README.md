@@ -43,7 +43,7 @@ view of this context is on the aggregator,
 
 - **Catalogue**: create a catalogue item (title, dimensions, weight, hazmat, fragile) and discontinue it; discontinuing suppresses every listing of the item.
 - **Identifiers and packaging**: an item may carry a GS1 `identifiers.gtin` and a packaging hierarchy `EACH < INNER < CASE < PALLET` (each level a GTIN with `unitsPerPack` in eaches, a child GTIN chain, optional dimensions and weight). The `unitsPerPack` of a GTIN never changes: a new count is a new GTIN and the old level is retired ([ADR 0006](docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md)).
-- **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE` or `DISCONTINUED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned. A seller's received inbound shipment (seller-inbound `InboundShipmentReceived`) creates the seller's listings of the received items at availability 0 (ADR 0014).
+- **Listings**: one listing per (catalogue item, node, optional `ownerRef`), `LIVE` while its node is `ACTIVE`, `SUPPRESSED` (reason `NODE_NOT_SELLABLE`, `DISCONTINUED` or `OWNER_SUSPENDED`) otherwise. `ownerRef` is the optional seller that owns the stock; absent means operator-owned. A seller's received inbound shipment (seller-inbound `InboundShipmentReceived`) creates the seller's listings of the received items at availability 0 (ADR 0014); `SellerSuspended` suppresses the seller's `LIVE` listings with `OWNER_SUSPENDED` and `SellerReinstated` reconciles them (ADR 0013).
 - **Inventory feeds**: a vendor sends the quantity a node can ship for its listings, with the basis it gave (`PHYSICAL`, `THROUGHPUT_CONSTRAINED`).
   A feed is applied in one transaction; a stale line is skipped and counted, an older feed is `SUPERSEDED`, a broken line makes the feed `FAILED`
   (recorded, and it may be sent again), and a full feed zeroes the listings it omits.
@@ -280,7 +280,7 @@ Git hooks are managed by [lefthook](https://github.com/evilmartians/lefthook)
 ## Tests
 
 - **Unit** — `go test ./...` (domain, use cases, handlers; `make test`).
-- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (`catalog`, `http_api`, `idempotency`, `inventory_feeds`, `listings`, `node_status`, `ownerref`, `packaging`); `make bdd`.
+- **BDD acceptance** — godog/Gherkin over the real HTTP API in `features/` (`catalog`, `catalog_rules`, `feed_rules`, `http_api`, `http_rules`, `idempotency`, `inventory_feeds`, `listings`, `node_status`, `ownerref`, `packaging`, `received_stock_rules`, `returns_restock_rules`, `suppression_rules`; 190 scenario definitions, 233 executed); `make bdd`.
 - **Integration** — testcontainers Postgres and Kafka: repositories, relay, middleware and a real-wiring test (`make integration`, build-tagged, needs only Docker).
 - **Coverage gate** — `make coverage`: ≥ 90% over `internal/domain` + `internal/application`.
 - **Mutation** — gremlins over every `internal/domain/<pkg>` (`make mutation`; the exhaustive `mutation-full`).

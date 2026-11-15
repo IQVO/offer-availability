@@ -20,6 +20,7 @@ const (
 	envKafkaBrokers      = "KAFKA_BROKERS"
 	envNodeConsumerGroup = "NODE_TOPOLOGY_CONSUMER_GROUP"
 	envSellerGroup       = "SELLER_INBOUND_CONSUMER_GROUP"
+	envReturnsGroup      = "CUSTOMER_RETURNS_CONSUMER_GROUP"
 	envRetentionInterval = "RETENTION_INTERVAL"
 	envHTTPAddr          = "HTTP_ADDR"
 	envRelayInterval     = "OUTBOX_RELAY_INTERVAL"
@@ -52,6 +53,11 @@ var ErrNoConsumerGroup = errors.New("missing required environment variable: " + 
 // defaulted, for the same reason as NODE_TOPOLOGY_CONSUMER_GROUP.
 var ErrNoSellerConsumerGroup = errors.New("missing required environment variable: " + envSellerGroup)
 
+// ErrNoReturnsConsumerGroup is the boot error of an unset or blank
+// CUSTOMER_RETURNS_CONSUMER_GROUP (the customer-returns consumer, ADR 0015):
+// never defaulted, for the same reason as NODE_TOPOLOGY_CONSUMER_GROUP.
+var ErrNoReturnsConsumerGroup = errors.New("missing required environment variable: " + envReturnsGroup)
+
 // config is the validated environment.
 type config struct {
 	databaseURL   string
@@ -59,6 +65,7 @@ type config struct {
 	brokers       string
 	nodeGroup     string
 	sellerGroup   string
+	returnsGroup  string
 	retention     time.Duration
 	addr          string
 	relayInterval time.Duration
@@ -70,7 +77,8 @@ type config struct {
 
 // loadConfig validates the environment before anything is opened or bound.
 // Every boot error names the variable: DATABASE_URL, KAFKA_BROKERS,
-// NODE_TOPOLOGY_CONSUMER_GROUP, SELLER_INBOUND_CONSUMER_GROUP.
+// NODE_TOPOLOGY_CONSUMER_GROUP, SELLER_INBOUND_CONSUMER_GROUP,
+// CUSTOMER_RETURNS_CONSUMER_GROUP.
 func loadConfig(getenv func(string) string, logger *slog.Logger) (config, error) {
 	dbURL, err := postgres.DatabaseURL(getenv)
 	if err != nil {
@@ -88,10 +96,15 @@ func loadConfig(getenv func(string) string, logger *slog.Logger) (config, error)
 	if sellerGroup == "" {
 		return config{}, ErrNoSellerConsumerGroup
 	}
+	returnsGroup := strings.TrimSpace(getenv(envReturnsGroup))
+	if returnsGroup == "" {
+		return config{}, ErrNoReturnsConsumerGroup
+	}
 	return config{
 		databaseURL:   dbURL,
 		nodeGroup:     group,
 		sellerGroup:   sellerGroup,
+		returnsGroup:  returnsGroup,
 		retention:     retentionInterval(getenv(envRetentionInterval), logger),
 		migrationsURL: postgres.MigrationsURL(getenv, dbURL),
 		brokers:       brokers,

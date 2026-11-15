@@ -40,7 +40,8 @@ See the [Core Domain Chart](/docs/ddd/core-domain-chart) for the placement.
 
 ## The neighbours (copied from the aggregator)
 
-From `network/strategic-design/subdomain-classification.md` on `origin/main` of `warehouse-docs`:
+From `network/strategic-design/subdomain-classification.md` on `origin/main` of `warehouse-docs` (the `pricing`, `product-content`,
+`product-discovery` and `shopping-cart` rows from its `storefront/` counterpart, tier and verdict as listed there):
 
 | Bounded context | Classification | Tier | Business model | Evolution | Relationship to this context |
 | --- | --- | --- | --- | --- | --- |
@@ -49,8 +50,12 @@ From `network/strategic-design/subdomain-classification.md` on `origin/main` of 
 | `node-topology` | Supporting | `logistics` | Enabler | Custom-built | Upstream: node lifecycle events, Conformist |
 | `vendor-connectivity` | Supporting | `partner` | Revenue-channel enabler | Product | Calls `POST /inventory-feeds`; consumes `ListingCreated` and pack-level events |
 | `node-performance` | Supporting | `partner` | Risk reducer | Custom-built | Downstream: measures feed freshness from `InventoryFeedApplied` |
-| `seller-inbound` | Supporting | `partner` | Supply enabler | Custom-built | Downstream: keeps a packaging view from pack-level events |
+| `seller-inbound` | Supporting | `partner` | Supply enabler | Custom-built | Downstream: keeps a packaging view from pack-level events and a demand view from `ListingAvailabilityChanged`; upstream: its seller and received-stock events drive owner listings here (ADR 0013, ADR 0014) |
 | `shipping-and-tracking` | Generic | `logistics` | Compliance and experience | Commodity | Downstream: keeps catalogue dimensions from `CatalogItemCreated` |
+| `pricing` | Core | `storefront` | Revenue (the price of speed per tier) | Custom-built | Downstream: consumes `CatalogItemCreated` and `CatalogItemDiscontinued` |
+| `product-content` | Generic | `storefront` | Engagement enabler | Commodity | Downstream: consumes `CatalogItemCreated` and `CatalogItemDiscontinued` |
+| `product-discovery` | Supporting | `storefront` | Conversion enabler | Custom-built | Downstream: consumes the catalogue and listing events |
+| `shopping-cart` | Supporting | `storefront` | Conversion | Custom-built | Downstream: consumes `CatalogItemCreated` and `CatalogItemDiscontinued` |
 | `linehaul-transportation`, `last-mile-delivery`, `customer-ordering` | Supporting, Supporting, Generic | `logistics`, `logistics`, `commerce` | | | No relationship (Separate Ways) |
 
 The aggregator counts two Core, seven Supporting and two Generic contexts across the network. Problem-space subdomain:

@@ -55,7 +55,7 @@ erDiagram
         TEXT node_id UK "UK with catalog_item_id and owner_ref"
         TEXT owner_ref UK "empty = operator-owned (0002)"
         TEXT state "LIVE, SUPPRESSED"
-        TEXT suppression_reason "NODE_NOT_SELLABLE, DISCONTINUED"
+        TEXT suppression_reason "NODE_NOT_SELLABLE, DISCONTINUED, OWNER_SUSPENDED"
         INTEGER available_qty "CHECK >= 0"
         TEXT basis "PHYSICAL, THROUGHPUT_CONSTRAINED, UNKNOWN"
         TIMESTAMPTZ as_of "NULL until the first feed"
