@@ -69,9 +69,10 @@ executes as **233 scenarios** because the Examples rows of the Scenario Outlines
 | `make vuln` | `govulncheck ./...` |
 | `make guide-lint`, `make harness-test` | Lint the agent guides; unit-test the agent hooks |
 
-`.gremlins.yaml` sets one worker, timeout coefficient 30 and **efficacy and mutant-coverage thresholds of 90**
-(gremlins fails at or below the threshold). Measured on 2026-10-23: `catalog` 14/14, `feed` 67/67, `listing` 37/37,
-`nodestatus` 15/15, `shared` 31/31 mutants killed.
+`.gremlins.yaml` sets one worker, timeout coefficient 30, an **efficacy threshold of 98 and a mutant-coverage threshold
+of 99** as plain integers (gremlins fails at or below the threshold, and ignores a quoted string). Measured on 2026-11-15:
+`catalog` 94 killed and 1 lived of 95 (an equivalent mutant, see `MUTATION.md`), `feed` 67/67, `listing` 56/56,
+`nodestatus` 15/15, `sellerstatus` 8/8, `shared` 187/187.
 
 ## Fitness tests (`internal/architecture`)
 
