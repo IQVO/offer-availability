@@ -112,9 +112,7 @@ func NewRouter(s *Server) (http.Handler, error) {
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		writeProblem(w, r, routeNotFound, "no route matches "+r.Method+" "+r.URL.EscapedPath())
 	})
-	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		writeProblem(w, r, methodNotAllowed, r.Method+" is not allowed on "+r.URL.EscapedPath())
-	})
+	r.MethodNotAllowed(methodNotAllowedFor(r))
 
 	r.Get("/healthz", handleHealthz)
 	r.Get("/readyz", readyz(s.Readiness))
