@@ -149,7 +149,10 @@ func (s *Server) listListings(w http.ResponseWriter, r *http.Request) {
 
 // applyInventoryFeed is POST /inventory-feeds. APPLIED and SUPERSEDED answer 201
 // with the feed. A FAILED feed is recorded and answers 422 whose instance is the
-// recorded feed, and the Idempotency-Key middleware is told to keep that record.
+// recorded feed; what the Idempotency-Key middleware does with that answer is the
+// replay class of its problem (negative-availability: OUTCOME, the record commits
+// with the stored 422; listing-not-on-node: RETRYABLE, the record stays and the key
+// is free, ADR 0016).
 func (s *Server) applyInventoryFeed(w http.ResponseWriter, r *http.Request) {
 	var body applyInventoryFeedBody
 	if err := decodeJSON(r, &body); err != nil {
@@ -166,9 +169,7 @@ func (s *Server) applyInventoryFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.Failed() {
-		keepWrites(r.Context())
-		p := problemFor(res.Failure)
-		writeProblemAt(w, p, res.Failure.Error(), fmt.Sprintf("/inventory-feeds/%s", res.Feed.FeedID))
+		writeErrorAt(w, r, res.Failure, fmt.Sprintf("/inventory-feeds/%s", res.Feed.FeedID))
 		return
 	}
 	writeJSON(w, http.StatusCreated, res.Feed)

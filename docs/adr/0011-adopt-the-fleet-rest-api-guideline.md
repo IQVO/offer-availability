@@ -8,6 +8,8 @@ scope and the 422 reuse answer of [ADR 0005](./0005-runtime-relay-consumer-and-i
 and the `after` cursor and `listings` key of [ADR 0002](./0002-aggregates-and-invariants.md)
 (A16). Those ADR bodies stay immutable.
 
+2026-11-19: the idempotency bullet ("a 4xx is stored", "`keepWrites`") is superseded in part by [ADR 0016](./0016-idempotency-replay-classes.md): each problem type declares a replay class and a RETRYABLE refusal is not stored.
+
 ## Context
 
 The fleet REST API guideline (R1-R8, enforced by `.spectral.yaml` with

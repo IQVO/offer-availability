@@ -7,6 +7,8 @@ context `offer-availability`, the pack pages (`aggregate-design-canvas`,
 `use-cases`, `domain-events`, `bounded-context-canvas`) and the Model Gap Register
 items G23 and G24, whose "Proposed resolution" is final (`contracts-delta.md`).
 
+2026-11-19: A22's `keepWrites` call is replaced by the OUTCOME replay class of the problem catalogue, and the FAILED feed's two causes no longer share one answer: see [ADR 0016](./0016-idempotency-replay-classes.md).
+
 ## Context
 
 The model gives three aggregate roots, each its own transaction boundary:

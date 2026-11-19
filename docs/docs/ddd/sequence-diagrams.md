@@ -15,8 +15,10 @@ outbox writes, the others are repository calls. A hyphen before a line break spl
 (`Catalog-ItemCreated` is `CatalogItemCreated`).
 
 Common to every REST write: the `Idempotency-Key` middleware (`internal/adapters/inbound/http/idempotency.go`) runs first. A
-key already stored for the route replays the first answer with `Idempotency-Replayed: true`, a new key is recorded in
-`idempotency_keys` in the same transaction as the use case. Common to every use case: `transact` runs the whole attempt a
+key already stored replays the stored answer with `Idempotency-Replayed: true`, a new key is recorded in
+`idempotency_keys` in the same transaction as the use case. A success is stored; a refusal is stored or released by the replay
+class of its problem type (FINAL stored, OUTCOME stored with its writes, RETRYABLE released, 5xx released;
+[ADR 0016](/docs/adr/0016-idempotency-replay-classes)). Common to every use case: `transact` runs the whole attempt a
 second time when it meets `ports.ErrConcurrentUpdate`, and reports `concurrent-update` (409) only if it happens again. Event
 arrows to Kafka name `<entity>.<EventName>` on `retailnetwork.offer-availability.events`; the full type is
 `com.retailnetwork.commerce.offer-availability.<entity>.<EventName>`.
@@ -248,7 +250,8 @@ Source: `internal/application/usecases/feeds.go` (`ApplyInventoryFeed.attempt`, 
 `internal/domain/feed/feed.go` (`NewSubmission`, `Apply`, `MarkApplied`, `MarkFailed`, `MarkSuperseded`).
 
 Omitted: the idempotency replay and the metric increment (`availability.inventory_feeds.applied`, one per outcome). For a
-`FAILED` feed the middleware commits the writes of the 422, so the feed row is kept; the failed feed's listings are discarded,
+`FAILED` feed the middleware commits the writes of the 422, so the feed row is kept (`negative-availability`: stored with the
+422; `listing-not-on-node`: the key is freed, the retry resubmits the feed); the failed feed's listings are discarded,
 never saved. Per line, `ApplyAvailability` skips a line whose `asOf` is not after the listing's (`ErrStaleAvailability`, counted
 as stale) and the outbox gets one `ListingAvailabilityChanged` per changed listing.
 

@@ -14,7 +14,8 @@ the aggregates it changes and the outbox rows for the events it raises commit to
 is `internal/adapters/inbound/http/handlers.go`; the routes are in `apis/openapi.yaml`.
 
 Every state-changing REST route needs an `Idempotency-Key` header (at most 200 printable characters, stored 24 hours); the
-same key with the same method, path and body replays the first answer with `Idempotency-Replayed: true`
+same key with the same method, path and body replays the stored answer with `Idempotency-Replayed: true` (a success or a final
+refusal; a refusal that a retry could pass is not stored and its key runs again, [ADR 0016](/docs/adr/0016-idempotency-replay-classes))
 ([Troubleshooting](/docs/operations/troubleshooting#idempotency-in-practice)).
 
 | Use case | Trigger | Success | Events raised |

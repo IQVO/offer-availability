@@ -75,8 +75,11 @@ aggregator's context map; this repository holds the contract of its own side onl
 `vendor-connectivity` owns the vendor-facing protocol (vendor authentication, asynchronous transactions, rate limits, the
 `202` answer) and calls `POST /inventory-feeds` in-organization to apply each feed, then `GET /inventory-feeds/{feedId}` if
 it needs the outcome. This service does not know vendors and does not check that a vendor acts on its own nodes; that is
-`vendor-connectivity`'s duty. Each call must carry an `Idempotency-Key`; a retry with the same key replays the first
-answer. A feed that ends `FAILED` is answered `422` with a problem and the same `feedId` may be re-sent with a new key.
+`vendor-connectivity`'s duty. Each call must carry an `Idempotency-Key`; a retry with the same key replays the stored
+answer when it was final for that request (a success, `feed-already-applied`, `negative-availability`) and **runs again**
+when it was not (`concurrent-update`, `listing-not-on-node`, ... are not stored, [ADR 0016](/docs/adr/0016-idempotency-replay-classes)).
+A feed that ends `FAILED` is answered `422` with a problem and the same `feedId` may be re-sent, with the same key after a
+`listing-not-on-node` and with a new key after a `negative-availability`.
 There is no call in the other direction.
 
 ## Downstream consumers (Kafka)

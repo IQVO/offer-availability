@@ -63,15 +63,26 @@ func decodeJSON(r *http.Request, dest any) error {
 }
 
 // writeError writes err as its RFC 9457 problem. An unmapped error is a 500
-// whose detail never leaks the internal message (it is logged instead).
+// whose detail never leaks the internal message (it is logged instead). The
+// capturing writer of the Idempotency-Key middleware is told the replay class
+// of the problem (MarkReplay): it decides there what happens to the answer.
 func writeError(w http.ResponseWriter, r *http.Request, err error) {
-	p := problemFor(err)
+	writeErrorAt(w, r, err, r.URL.EscapedPath())
+}
+
+// writeErrorAt is writeError with an explicit instance (the FAILED feed answers
+// with the instance of the feed it recorded, not of the POST).
+func writeErrorAt(w http.ResponseWriter, r *http.Request, err error, instance string) {
+	entry, known := entryFor(err)
+	if m, ok := w.(replayMarker); ok {
+		m.MarkReplay(entry.replay, entry.record)
+	}
 	detail := err.Error()
-	if p == internalProblem {
+	if !known {
 		slog.ErrorContext(r.Context(), "request failed", "error", sanitizeLog(err.Error()), "method", sanitizeLog(r.Method), "path", sanitizeLog(r.URL.Path))
 		detail = "an unexpected error occurred"
 	}
-	writeProblem(w, r, p, detail)
+	writeProblemAt(w, entry.p, detail, instance)
 }
 
 // writeProblem writes p with an explicit detail.
@@ -79,8 +90,7 @@ func writeProblem(w http.ResponseWriter, r *http.Request, p problem, detail stri
 	writeProblemAt(w, p, detail, r.URL.EscapedPath())
 }
 
-// writeProblemAt writes p with an explicit detail and instance (the FAILED feed
-// answers with the instance of the feed it recorded, not of the POST).
+// writeProblemAt writes p with an explicit detail and instance.
 func writeProblemAt(w http.ResponseWriter, p problem, detail, instance string) {
 	w.Header().Set("Content-Type", contentProblem)
 	w.WriteHeader(p.status)
