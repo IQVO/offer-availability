@@ -123,6 +123,10 @@ type storedAnswer struct {
 // again; the same key with another fingerprint is 409 idempotency-key-reused;
 // a missing key is 400 idempotency-key-required, an unusable one 400
 // idempotency-key-invalid; a 5xx outcome is never stored so the key can retry.
+// It is NOT class-aware (ADR 0016): it stores every answer below 500, so a
+// RETRYABLE refusal would be replayed here. The replay classes are proven on the
+// real middleware by internal/adapters/inbound/http/idempotency_replay_classes_test.go
+// and idempotency_replay_integration_test.go; no scenario retries a RETRYABLE refusal.
 type memoryIdempotency struct {
 	mu      sync.Mutex
 	handled map[string]storedAnswer

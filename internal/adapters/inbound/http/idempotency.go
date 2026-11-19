@@ -46,8 +46,9 @@ type Idempotency func(route string) func(http.Handler) http.Handler
 //
 //   - The request is identified by key alone (global); its fingerprint is
 //     sha256(method, path, body). The same key with the same fingerprint replays
-//     the FIRST response (status and body, header Idempotency-Replayed: true);
-//     the same key with another fingerprint is 409 idempotency-key-reused.
+//     the STORED response (status and body, header Idempotency-Replayed: true);
+//     the same key with another fingerprint is 409 idempotency-key-reused. A
+//     response is stored only when it is final for that request (below).
 //   - Two concurrent requests with the same key race on INSERT ... ON CONFLICT
 //     DO NOTHING. Postgres serialises them on the primary-key index: the second
 //     statement blocks until the first transaction resolves, so a reader that
