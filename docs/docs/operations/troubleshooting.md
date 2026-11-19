@@ -57,8 +57,8 @@ is **no circuit breaker** to trip; the dependencies that can fail are Postgres a
 
 | Symptom | Likely cause | Check | Fix |
 | --- | --- | --- | --- |
-| `POST /inventory-feeds` 422 `listing-not-on-node` | A line names a listing that does not exist or belongs to another node. The feed is **recorded as `FAILED`** and nothing else changes | `GET /inventory-feeds/{feedId}` shows `state: FAILED`, `failureCode` | Correct the lines and re-send the **same `feedId`**: a `FAILED` feed may be re-sent, with a new `Idempotency-Key` |
-| 422 `negative-availability` | A line has `availableQty` below 0; recorded as `FAILED` | As above | Correct the quantity |
+| `POST /inventory-feeds` 422 `listing-not-on-node` | A line names a listing that does not exist (yet: listings are also created from events) or belongs to another node. The feed is **recorded as `FAILED`** and nothing else changes; the answer is **not stored**, the `Idempotency-Key` is free | `GET /inventory-feeds/{feedId}` shows `state: FAILED`, `failureCode` | Retry the same request with the **same key** once the listing exists (it turns `APPLIED`), or correct the lines and re-send the **same `feedId`** |
+| 422 `negative-availability` | A line has `availableQty` below 0; recorded as `FAILED`, and the 422 is **stored** with it (a retry under the same key replays it) | As above | Correct the quantity and re-send the same `feedId` with a **new** `Idempotency-Key` |
 | 409 `feed-already-applied` | The `feedId` is already `APPLIED` or `SUPERSEDED` | `GET /inventory-feeds/{feedId}` | Use a new `feedId` for new data |
 | A feed is `SUPERSEDED`, no listing changed | Its `asOf` is older than the last `APPLIED` feed of the node (kept per node in `node_feed_marks`) | `SELECT * FROM node_feed_marks WHERE node_id = '<node>';` | Expected ordering behaviour; send a feed with a later `asOf` |
 | `appliedCount` is lower than `lineCount`, `staleCount` above 0 | A line is older than the availability the listing already holds | `staleCount` on the feed | Expected; that line is skipped |
@@ -95,12 +95,19 @@ the catalogue in `internal/adapters/inbound/http/problems.go`.
 
 ### Idempotency in practice
 
-- Every `POST` and `PUT` is keyed by (route, `Idempotency-Key`). The same key with the same method, path and body replays
-  the first answer with `Idempotency-Replayed: true`, for 24 hours.
-- A stored answer is replayed whatever its status below 500: 2xx and 4xx are both stored. A 5xx is never stored, so the
-  same key can retry the real work.
-- A 4xx rolls the handler's writes back, except a `FAILED` feed, which is kept on purpose.
-- Two concurrent requests with one new key serialize on the `idempotency_keys` primary key; the second replays the first.
+The rule and the class of every problem type: [ADR 0016](/docs/adr/0016-idempotency-replay-classes).
+
+- The key is global (`idempotency_keys`, 24 hours) and keys only the `POST` routes; `PUT` takes none. The same key with the
+  same method, path and body replays a **stored** answer with `Idempotency-Replayed: true`.
+- What is stored depends on the answer. A 2xx is stored. A refusal is stored only when it is final for that request (`FINAL`:
+  `gtin-already-assigned`, `duplicate-listing`, `feed-already-applied`, invalid fields, ...) or an outcome that was committed
+  (`OUTCOME`: `negative-availability`, whose `FAILED` feed commits with the stored 422).
+- A refusal the same request can pass later (`RETRYABLE`: `concurrent-update`, `not-found`, `pack-level-not-found`,
+  `illegal-transition`, `node-not-sellable`, `validation-failed`, `listing-not-on-node`) and every 5xx or panic is **not
+  stored**: the key is released and a retry under the same key runs again. A different body under a released key is a new
+  request, not `idempotency-key-reused`. `listing-not-on-node` still keeps its `FAILED` feed (`GET /inventory-feeds/{feedId}`).
+- Two concurrent requests with one new key serialize on the `idempotency_keys` primary key; the second waits. If the first
+  is stored, the second replays it; if the first was released, the second runs the work itself.
 - Expired keys are purged by every keyed write and by the hourly janitor.
 
 ## MCP and A2A
