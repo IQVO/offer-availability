@@ -12,6 +12,10 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/claudioed/offer-availability/internal/application/ports"
+	"github.com/claudioed/offer-availability/internal/domain/feed"
+	"github.com/claudioed/offer-availability/internal/domain/listing"
 )
 
 // The Postgres-backed paths of idempotency.go (ServeHTTP, replay) are proven on
@@ -87,6 +91,9 @@ func (t *fakeTx) Exec(_ context.Context, sql string, args ...any) (pgconn.Comman
 	// passes status,body,route,key.
 	id := func(key any) string { return fmt.Sprintf("%v", key) }
 	switch {
+	case strings.HasPrefix(sql, "DELETE FROM idempotency_keys WHERE key"):
+		t.log.op("release %s", id(args[0]))
+		return pgconn.NewCommandTag("DELETE 1"), nil
 	case strings.HasPrefix(sql, "DELETE FROM idempotency_keys"):
 		t.log.op("purge")
 		return pgconn.NewCommandTag("DELETE 0"), nil
@@ -252,21 +259,6 @@ func TestCaptureDefaultsTo200AndKeepsTheFirstWriteHeader(t *testing.T) {
 	}
 }
 
-func TestKeepWritesFlagIsOffUnlessTheHandlerRaisesIt(t *testing.T) {
-	ctx, flag := withKeepWrites(context.Background())
-	if flag.Load() {
-		t.Fatal("the flag starts clear")
-	}
-	keepWrites(context.Background()) // no flag in a plain context: must not panic
-	if flag.Load() {
-		t.Fatal("keepWrites on a foreign context set the flag")
-	}
-	keepWrites(ctx)
-	if !flag.Load() {
-		t.Fatal("keepWrites on the middleware's context did not set the flag")
-	}
-}
-
 // ---- the transactional core ------------------------------------------------
 
 func TestClaimInsertsAKeyOnce(t *testing.T) {
@@ -315,7 +307,7 @@ func TestSettleCommitsASuccessAndStoresItsOutcome(t *testing.T) {
 	tx, sp := &fakeTx{log: log}, &fakeTx{log: log, savep: true}
 	rec := &capture{header: http.Header{}}
 	rec.WriteHeader(http.StatusCreated)
-	if err := (&keyed{route: "POST /listings"}).settle(context.Background(), tx, sp, "k1", rec, false); err != nil {
+	if err := (&keyed{route: "POST /listings"}).settle(context.Background(), tx, sp, "k1", rec, settleStore); err != nil {
 		t.Fatal(err)
 	}
 	ops := strings.Join(log.snapshot(), ",")
@@ -329,12 +321,12 @@ func TestSettleCommitsASuccessAndStoresItsOutcome(t *testing.T) {
 	}
 }
 
-func TestSettleDropsTheWritesOfA4xxButStillStoresIt(t *testing.T) {
+func TestSettleDropsTheWritesOfAFinalRefusalButStillStoresIt(t *testing.T) {
 	log := newTxLog()
 	tx, sp := &fakeTx{log: log}, &fakeTx{log: log, savep: true}
 	rec := &capture{header: http.Header{}}
 	rec.WriteHeader(http.StatusUnprocessableEntity)
-	if err := (&keyed{route: "POST /listings"}).settle(context.Background(), tx, sp, "k1", rec, false); err != nil {
+	if err := (&keyed{route: "POST /listings"}).settle(context.Background(), tx, sp, "k1", rec, settleFinal); err != nil {
 		t.Fatal(err)
 	}
 	ops := strings.Join(log.snapshot(), ",")
@@ -343,16 +335,30 @@ func TestSettleDropsTheWritesOfA4xxButStillStoresIt(t *testing.T) {
 	}
 }
 
-func TestSettleKeepsTheWritesOfA4xxTheHandlerAskedToKeep(t *testing.T) {
+func TestSettleCommitsTheWritesOfAnOutcomeWithItsStoredAnswer(t *testing.T) {
 	log := newTxLog()
 	tx, sp := &fakeTx{log: log}, &fakeTx{log: log, savep: true}
 	rec := &capture{header: http.Header{}}
 	rec.WriteHeader(http.StatusUnprocessableEntity)
-	if err := (&keyed{route: "POST /inventory-feeds"}).settle(context.Background(), tx, sp, "k1", rec, true); err != nil {
+	if err := (&keyed{route: "POST /inventory-feeds"}).settle(context.Background(), tx, sp, "k1", rec, settleOutcome); err != nil {
 		t.Fatal(err)
 	}
-	if ops := strings.Join(log.snapshot(), ","); !strings.Contains(ops, "sp-commit") {
-		t.Fatalf("ops = %v, want the savepoint kept (keepWrites)", ops)
+	if ops := strings.Join(log.snapshot(), ","); !strings.Contains(ops, "sp-commit") || !strings.Contains(ops, "store k1 422") {
+		t.Fatalf("ops = %v, want the savepoint committed and the 422 stored", ops)
+	}
+}
+
+func TestSettleRecordCommitsTheWritesAndFreesTheKey(t *testing.T) {
+	log := newTxLog()
+	tx, sp := &fakeTx{log: log}, &fakeTx{log: log, savep: true}
+	rec := &capture{header: http.Header{}}
+	rec.WriteHeader(http.StatusUnprocessableEntity)
+	if err := (&keyed{route: "POST /inventory-feeds"}).settle(context.Background(), tx, sp, "k1", rec, settleRecord); err != nil {
+		t.Fatal(err)
+	}
+	ops := strings.Join(log.snapshot(), ",")
+	if !strings.Contains(ops, "sp-commit") || !strings.Contains(ops, "release k1") || strings.Contains(ops, "store ") || !strings.HasSuffix(ops, "commit") {
+		t.Fatalf("ops = %v, want the writes committed, the key row deleted, no answer stored", ops)
 	}
 }
 
@@ -362,7 +368,7 @@ func TestSettleRefusesToCommitWhenStoringFails(t *testing.T) {
 	tx, sp := &fakeTx{log: log}, &fakeTx{log: log, savep: true}
 	rec := &capture{header: http.Header{}}
 	rec.WriteHeader(http.StatusCreated)
-	if err := (&keyed{route: "r"}).settle(context.Background(), tx, sp, "k1", rec, false); err == nil {
+	if err := (&keyed{route: "r"}).settle(context.Background(), tx, sp, "k1", rec, settleStore); err == nil {
 		t.Fatal("settle = nil, want the store failure")
 	}
 	if ops := strings.Join(log.snapshot(), ","); strings.Contains(ops, "commit") && !strings.Contains(ops, "sp-commit") {
@@ -392,22 +398,58 @@ func TestRunFreshAnswersStoresAndFlushes(t *testing.T) {
 	}
 }
 
-func TestRunFreshKeepsA4xxTheHandlerAskedToKeep(t *testing.T) {
-	log := newTxLog()
-	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		keepWrites(r.Context()) // what applyInventoryFeed does for a FAILED feed
-		w.WriteHeader(http.StatusUnprocessableEntity)
-	})
-	out := httptest.NewRecorder()
-	newKeyed("POST /inventory-feeds", next).runFresh(
-		context.Background(), out, httptest.NewRequest(http.MethodPost, "/inventory-feeds", nil), &fakeTx{log: log}, "k1")
+// answering answers the 4xx of err through the production writer, as a handler does.
+func answering(err error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { writeError(w, r, err) })
+}
 
-	if out.Code != http.StatusUnprocessableEntity {
-		t.Fatalf("response = %d, want 422", out.Code)
+func runRefusal(t *testing.T, err error) (*httptest.ResponseRecorder, string) {
+	t.Helper()
+	log := newTxLog()
+	out := httptest.NewRecorder()
+	newKeyed("POST /inventory-feeds", answering(err)).runFresh(
+		context.Background(), out, httptest.NewRequest(http.MethodPost, "/inventory-feeds", nil), &fakeTx{log: log}, "k1")
+	return out, strings.Join(log.snapshot(), ",")
+}
+
+func TestRunFreshActsOnTheClassOfTheRefusal(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err  error
+		want []string
+		not  []string
+	}{
+		"FINAL stores the answer and drops the writes":   {errMalformedRequest, []string{"sp-rollback", "store k1 400"}, []string{"sp-commit"}},
+		"OUTCOME commits the writes with the answer":     {listing.ErrNegativeAvailability, []string{"sp-commit", "store k1 422"}, nil},
+		"RETRYABLE+record keeps the fact, frees the key": {feed.ErrListingNotOnNode, []string{"sp-commit", "release k1"}, []string{"store "}},
+		"RETRYABLE rolls everything back":                {ports.ErrConcurrentUpdate, []string{"rollback"}, []string{"store ", "release", "sp-commit"}},
+		"an unmapped error is a 500 and rolls back":      {errors.New("boom"), []string{"rollback"}, []string{"store ", "sp-commit"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			out, ops := runRefusal(t, tc.err)
+			if out.Code < http.StatusBadRequest {
+				t.Fatalf("response = %d", out.Code)
+			}
+			for _, w := range tc.want {
+				if !strings.Contains(ops, w) {
+					t.Errorf("ops = %v, want %q", ops, w)
+				}
+			}
+			for _, n := range tc.not {
+				if strings.Contains(ops, n) {
+					t.Errorf("ops = %v, must not contain %q", ops, n)
+				}
+			}
+		})
 	}
-	ops := strings.Join(log.snapshot(), ",")
-	if !strings.Contains(ops, "sp-commit") || !strings.Contains(ops, "store k1 422") {
-		t.Fatalf("ops = %v, want the writes kept and the 422 stored", ops)
+}
+
+func TestRunFreshReleasesARefusalWithNoClass(t *testing.T) {
+	log := newTxLog()
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusConflict) })
+	out := httptest.NewRecorder()
+	newKeyed("POST /x", next).runFresh(context.Background(), out, httptest.NewRequest(http.MethodPost, "/x", nil), &fakeTx{log: log}, "k1")
+	if ops := strings.Join(log.snapshot(), ","); out.Code != http.StatusConflict || strings.Contains(ops, "store ") || !strings.Contains(ops, "rollback") {
+		t.Fatalf("response %d ops %v, want the 409 answered and released like RETRYABLE", out.Code, ops)
 	}
 }
 
