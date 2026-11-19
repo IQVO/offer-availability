@@ -18,25 +18,27 @@ import (
 // The replay-class tests over REAL Postgres and the real router (ADR 0016): a
 // RETRYABLE refusal leaves no key row, so the same key runs the work again.
 
-// racingCatalog stands for a competing writer: on its first Get it commits a
-// new version of the item from ANOTHER connection, so the Save of the request
-// that read the old version is refused ports.ErrConcurrentUpdate. When release
-// is set the Get waits on it first (a second request is then queued behind the
-// key row).
+// racingCatalog stands for a competing writer: on each of its first two Gets it
+// commits a new version of the item from ANOTHER connection, so the Save of the
+// request that read the old version is refused ports.ErrConcurrentUpdate (the
+// use case re-runs once, ADR 0002 A15, so one race alone is absorbed and two are
+// reported). When release is set the first Get waits on it (a second request is
+// then queued behind the key row).
 type racingCatalog struct {
 	ports.CatalogRepository
 	pool    *pgtest.Pool
-	raced   atomic.Bool
+	gets    atomic.Int32
 	reading chan struct{}
 	release chan struct{}
 }
 
 func (c *racingCatalog) Get(ctx context.Context, id catalog.ID) (*catalog.Item, error) {
 	item, err := c.CatalogRepository.Get(ctx, id)
-	if err != nil || !c.raced.CompareAndSwap(false, true) {
+	n := c.gets.Add(1)
+	if err != nil || n > 2 {
 		return item, err
 	}
-	if c.release != nil {
+	if n == 1 && c.release != nil {
 		close(c.reading)
 		<-c.release
 	}
