@@ -112,7 +112,7 @@ func purge(ctx context.Context, r *postgres.Retention, logger *slog.Logger) {
 	n, err := r.Purge(ctx)
 	if err != nil {
 		if ctx.Err() == nil {
-			logger.Error("retention purge failed", "error", err)
+			logger.Error("retention purge failed", "error", sanitizeErr(err))
 		}
 		return
 	}

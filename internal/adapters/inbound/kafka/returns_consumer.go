@@ -102,14 +102,14 @@ func (c *ReturnsConsumer) HandleMessage(ctx context.Context, value []byte) error
 	logger := defaultLogger(c.Logger)
 	e, err := cloudevents.Decode(value)
 	if err != nil {
-		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", CustomerReturnsTopic, "error", err)
+		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", CustomerReturnsTopic, "error", sanitizeErr(err))
 		return nil
 	}
 	if e.Type() != typeReturnCompleted {
 		if c.Ignored != nil {
 			c.Ignored.Ignored(ctx, e.Type())
 		}
-		logger.DebugContext(ctx, "ignoring a type this service does not consume", "topic", CustomerReturnsTopic, "type", e.Type(), "event_id", e.ID())
+		logger.DebugContext(ctx, "ignoring a type this service does not consume", "topic", CustomerReturnsTopic, "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()))
 		return nil
 	}
 	ev, err := returnCompletedFrom(e)
@@ -124,7 +124,7 @@ func (c *ReturnsConsumer) HandleMessage(ctx context.Context, value []byte) error
 			return err
 		}
 	}
-	logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", e.Type(), "event_id", e.ID(), "error", err)
+	logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "error", sanitizeErr(err))
 	return fmt.Errorf("%w: %w", errPoison, err)
 }
 
@@ -181,16 +181,16 @@ func returnCompletedFrom(e ce.Event) (usecases.ReturnCompletionEvent, error) {
 func logReturnCompletion(ctx context.Context, logger *slog.Logger, ev usecases.ReturnCompletionEvent, res usecases.ReturnCompletionResult) {
 	attrs := []any{"type", ev.EventType, "event_id", ev.EventID, "authorization_id", ev.AuthorizationID, "node_id", string(ev.NodeID)}
 	if res.Duplicate {
-		logger.DebugContext(ctx, "event already processed", attrs...)
+		logger.DebugContext(ctx, "event already processed", sanitizeArgs(attrs)...)
 		return
 	}
 	if res.LinesAbsent {
-		logger.InfoContext(ctx, "a return completion without lines restocked nothing", attrs...)
+		logger.InfoContext(ctx, "a return completion without lines restocked nothing", sanitizeArgs(attrs)...)
 		return
 	}
 	for _, s := range res.Skipped {
 		logger.WarnContext(ctx, "a return line restocked nothing; skipped",
-			append(attrs, "catalog_item_id", string(s.CatalogItemID), "owner_ref", string(s.OwnerRef), "reason", s.Reason)...)
+			sanitizeArgs(append(attrs, "catalog_item_id", string(s.CatalogItemID), "owner_ref", string(s.OwnerRef), "reason", s.Reason))...)
 	}
-	logger.InfoContext(ctx, "event processed", append(attrs, "listings_restocked", len(res.Restocked), "lines_skipped", len(res.Skipped))...)
+	logger.InfoContext(ctx, "event processed", sanitizeArgs(append(attrs, "listings_restocked", len(res.Restocked), "lines_skipped", len(res.Skipped)))...)
 }

@@ -128,7 +128,7 @@ func (c *SellerConsumer) HandleMessage(ctx context.Context, value []byte) error 
 	logger := defaultLogger(c.Logger)
 	e, err := cloudevents.Decode(value)
 	if err != nil {
-		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", SellerTopic, "error", err)
+		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", SellerTopic, "error", sanitizeErr(err))
 		return nil
 	}
 	if e.Type() == typeInboundShipmentReceived && c.Received != nil {
@@ -136,23 +136,23 @@ func (c *SellerConsumer) HandleMessage(ctx context.Context, value []byte) error 
 	}
 	ev, handled, err := sellerEventFrom(e)
 	if err != nil {
-		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", e.Type(), "event_id", e.ID(), "error", err)
+		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "error", sanitizeErr(err))
 		return fmt.Errorf("%w: %w", errPoison, err)
 	}
 	if !handled {
 		if c.Ignored != nil {
 			c.Ignored.Ignored(ctx, e.Type())
 		}
-		logger.DebugContext(ctx, "ignoring a type this service does not consume", "topic", SellerTopic, "type", e.Type(), "event_id", e.ID())
+		logger.DebugContext(ctx, "ignoring a type this service does not consume", "topic", SellerTopic, "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()))
 		return nil
 	}
 	err = c.UseCase.Execute(ctx, ev)
 	if errors.Is(err, shared.ErrValidation) {
-		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", e.Type(), "event_id", e.ID(), "error", err)
+		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "error", sanitizeErr(err))
 		return fmt.Errorf("%w: %w", errPoison, err)
 	}
 	if err == nil {
-		logger.InfoContext(ctx, "event processed", "type", e.Type(), "event_id", e.ID(), "subject", e.Subject())
+		logger.InfoContext(ctx, "event processed", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "subject", sanitizeLog(e.Subject()))
 	}
 	return err
 }

@@ -73,23 +73,23 @@ func (c *SellerConsumer) handleReceived(ctx context.Context, logger *slog.Logger
 			return err
 		}
 	}
-	logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", e.Type(), "event_id", e.ID(), "error", err)
+	logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "error", sanitizeErr(err))
 	return fmt.Errorf("%w: %w", errPoison, err)
 }
 
 func logReceived(ctx context.Context, logger *slog.Logger, ev usecases.ReceivedStockEvent, res usecases.ReceivedStockResult) {
 	attrs := []any{"type", ev.EventType, "event_id", ev.EventID, "shipment_id", ev.ShipmentID, "seller_id", string(ev.SellerID), "node_id", string(ev.NodeID)}
 	if res.Duplicate {
-		logger.DebugContext(ctx, "event already processed", attrs...)
+		logger.DebugContext(ctx, "event already processed", sanitizeArgs(attrs)...)
 		return
 	}
 	if res.Unknown {
-		logger.InfoContext(ctx, "received stock is unknown (the event carries no received list); no listing created", attrs...)
+		logger.InfoContext(ctx, "received stock is unknown (the event carries no received list); no listing created", sanitizeArgs(attrs)...)
 		return
 	}
 	for _, s := range res.Skipped {
 		logger.WarnContext(ctx, "a received line resolves to no catalogue item; skipped",
-			append(attrs, "gtin", s.GTIN, "catalog_item_id", string(s.CatalogItemID), "reason", s.Reason)...)
+			sanitizeArgs(append(attrs, "gtin", s.GTIN, "catalog_item_id", string(s.CatalogItemID), "reason", s.Reason))...)
 	}
-	logger.InfoContext(ctx, "event processed", append(attrs, "listings_created", len(res.Created), "listings_existing", res.Existing, "lines_skipped", len(res.Skipped))...)
+	logger.InfoContext(ctx, "event processed", sanitizeArgs(append(attrs, "listings_created", len(res.Created), "listings_existing", res.Existing, "lines_skipped", len(res.Skipped)))...)
 }
