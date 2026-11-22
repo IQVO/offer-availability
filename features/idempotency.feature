@@ -1,8 +1,8 @@
 Feature: Idempotency-Key on the state-changing routes
   The OpenAPI parameter Idempotency-Key is required on POST /catalog-items,
   POST /catalog-items/{id}/discontinuations, POST /listings and POST /inventory-feeds.
-  A repeat with the same key and the same request replays the first answer and
-  does the work once; the same key with another request is 409
+  A repeat with the same key and the same request replays the stored answer and
+  does the work once (a refusal that a retry could pass is not stored, ADR 0016); the same key with another request is 409
   idempotency-key-reused (apis/openapi.yaml, .claude/rules/rest-api.md).
 
   Background:

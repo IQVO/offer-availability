@@ -462,3 +462,42 @@ func TestPackBoundaries(t *testing.T) {
 		t.Fatalf("two eaches is the smallest case: %v", err)
 	}
 }
+
+func TestRetiringTheOnlyDeclaredLevelRetiresIt(t *testing.T) {
+	// EACH is the single definition, at index 0 and active: the retirement must
+	// find it (a boundary slip on the index would report "no change" instead).
+	it := newPackItem(t)
+	mustDeclare(t, it, catalog.PackLevelEach, spec(t, gEach, "", 1))
+	v := it.Version()
+	ev, err := it.RetirePackLevel(catalog.PackLevelEach, packNow.Add(time.Minute))
+	if err != nil || len(ev) != 1 || it.Version() != v+1 {
+		t.Fatalf("ev=%v err=%v version=%d (was %d)", ev, err, it.Version(), v)
+	}
+	r, ok := ev[0].(catalog.CatalogItemPackLevelRetired)
+	if !ok || r.GTIN != gtin(t, gEach) || !r.RetiredAt.Equal(packNow.Add(time.Minute)) {
+		t.Fatalf("event = %#v", ev[0])
+	}
+	if got := it.Packaging(); len(got) != 1 || got[0].Active || !got[0].RetiredAt.Equal(packNow.Add(time.Minute)) {
+		t.Fatalf("packaging = %+v, want the one level kept and retired", got)
+	}
+}
+
+func TestPackagingKeepsDeclarationOrderWithinALevel(t *testing.T) {
+	it := chain(t)
+	// The case level is superseded: the retired gCase and the active gSpare
+	// share a level and must stay in declaration order, lowest level first.
+	mustDeclare(t, it, catalog.PackLevelCase, spec(t, gSpare, gInner, 12))
+	want := []string{gEach, gInner, gCase, gSpare, gPallet}
+	got := it.Packaging()
+	if len(got) != len(want) {
+		t.Fatalf("packaging has %d levels, want %d: %+v", len(got), len(want), got)
+	}
+	for n, g := range want {
+		if got[n].GTIN != gtin(t, g) {
+			t.Fatalf("position %d = %v (level %s), want %s", n, got[n].GTIN, got[n].Level, g)
+		}
+	}
+	if got[2].Active || !got[3].Active {
+		t.Fatalf("the superseded case must come first and be retired: %+v %+v", got[2], got[3])
+	}
+}

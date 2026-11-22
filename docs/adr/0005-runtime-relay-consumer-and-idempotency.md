@@ -4,6 +4,8 @@
 
 Accepted (2026-10-23).
 
+2026-11-19: decision 4 (the FAILED feed's 422 stored and replayed through the `keepWrites` flag) is superseded in part by [ADR 0016](./0016-idempotency-replay-classes.md): the flag is the OUTCOME replay class of the problem, and a `listing-not-on-node` refusal is no longer stored.
+
 ## Context
 
 `cmd/api` runs three background loops next to the HTTP server: the transactional

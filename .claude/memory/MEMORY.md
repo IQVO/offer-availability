@@ -24,4 +24,4 @@ Format: one entry per lesson, stated as a fact with its evidence, not as an inst
   instants ("newer than") must truncate at the boundary (`shared.UTC`), else the same instant compares differently before and
   after a round trip through the database. Found here when the repository contract suite failed only on Postgres.
 - A 4xx behind a rollback-on-4xx idempotency middleware drops everything the handler wrote, including a record the API promises
-  to keep (a FAILED inventory feed). Decide per route whether the 4xx is an outcome to record (ADR 0005, `keepWrites`).
+  to keep (a FAILED inventory feed). Decide per problem type whether the 4xx is an outcome to record (replay class OUTCOME on the catalogue entry, ADR 0016; ADR 0005's `keepWrites` is gone).

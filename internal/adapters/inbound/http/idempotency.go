@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"sync/atomic"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,8 +46,9 @@ type Idempotency func(route string) func(http.Handler) http.Handler
 //
 //   - The request is identified by key alone (global); its fingerprint is
 //     sha256(method, path, body). The same key with the same fingerprint replays
-//     the FIRST response (status and body, header Idempotency-Replayed: true);
-//     the same key with another fingerprint is 409 idempotency-key-reused.
+//     the STORED response (status and body, header Idempotency-Replayed: true);
+//     the same key with another fingerprint is 409 idempotency-key-reused. A
+//     response is stored only when it is final for that request (below).
 //   - Two concurrent requests with the same key race on INSERT ... ON CONFLICT
 //     DO NOTHING. Postgres serialises them on the primary-key index: the second
 //     statement blocks until the first transaction resolves, so a reader that
@@ -56,13 +56,34 @@ type Idempotency func(route string) func(http.Handler) http.Handler
 //     rolled back, the blocked insert succeeds instead and does the work).
 //   - The handler runs inside a SAVEPOINT of that transaction, bound into its
 //     context (TxBinder), so the key, the aggregates and the outbox rows of a
-//     2xx commit together. A 4xx rolls the handler's writes back to the
-//     savepoint but is still stored (a repeat answers the same). A 5xx or a panic
-//     rolls everything back and is never stored, so the same key can retry the
-//     real work.
+//     2xx commit together. A 5xx or a panic rolls everything back and is never
+//     stored, so the same key can retry the real work.
+//   - A refusal (a non-2xx, non-5xx answer) is decided by the replay class its
+//     problem type declares on the catalogue (ADR 0016; the middleware holds no
+//     slug and no status range beyond 2xx and 5xx): FINAL rolls the handler's
+//     writes back and stores the answer; OUTCOME commits the writes with the
+//     stored answer; RETRYABLE is released exactly like a 5xx, key row included,
+//     so a retry under the same key executes again (an entry that records a fact,
+//     the FAILED feed of listing-not-on-node, commits that fact and still frees
+//     the key); an answer with no class is released like RETRYABLE.
+//   - A duplicate that arrives while the first request is running waits on the
+//     key row. When the first ends RETRYABLE the row is gone, the duplicate's
+//     insert succeeds and it executes the work itself: it is neither answered
+//     idempotency-key-reused nor replayed.
 //   - Keys live 24 hours. Every keyed write first purges the expired rows
 //     (indexed on created_at); an expired key is simply a new key.
 func RequireIdempotencyKey(pool *pgxpool.Pool, bind TxBinder) Idempotency {
+	return requireKey(pool, bind)
+}
+
+// txPool is what the middleware needs of the pool: a transaction and the read
+// of a committed key row. *pgxpool.Pool is the production one.
+type txPool interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+func requireKey(pool txPool, bind TxBinder) Idempotency {
 	return func(route string) func(http.Handler) http.Handler {
 		return func(next http.Handler) http.Handler {
 			return &keyed{pool: pool, bind: bind, route: route, next: next}
@@ -71,7 +92,7 @@ func RequireIdempotencyKey(pool *pgxpool.Pool, bind TxBinder) Idempotency {
 }
 
 type keyed struct {
-	pool  *pgxpool.Pool
+	pool  txPool
 	bind  TxBinder
 	route string
 	next  http.Handler
@@ -207,32 +228,9 @@ func replayContentType(status int) string {
 	return contentJSON
 }
 
-// capture records the handler's response so it can be persisted and committed
-// BEFORE anything reaches the client.
-type capture struct {
-	header http.Header
-	code   int
-	body   bytes.Buffer
-}
-
-func (c *capture) Header() http.Header { return c.header }
-
-func (c *capture) WriteHeader(code int) {
-	if c.code == 0 {
-		c.code = code
-	}
-}
-
-func (c *capture) Write(b []byte) (int, error) {
-	if c.code == 0 {
-		c.code = http.StatusOK
-	}
-	return c.body.Write(b)
-}
-
-// runFresh handles a genuinely new key: run the handler in a savepoint, record
-// the outcome in the same transaction, commit, and only then write to the
-// client.
+// runFresh handles a genuinely new key: run the handler in a savepoint, decide
+// from the answer what to keep (settlementOf), record the outcome in the same
+// transaction, commit, and only then write to the client.
 func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Request, tx pgx.Tx, key string) {
 	finished := false
 	defer func() {
@@ -246,7 +244,6 @@ func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Req
 		return
 	}
 	rec := &capture{header: http.Header{}}
-	ctx, kept := withKeepWrites(ctx)
 	func() {
 		defer func() {
 			if p := recover(); p != nil {
@@ -259,13 +256,14 @@ func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Req
 	if rec.code == 0 {
 		rec.code = http.StatusOK
 	}
-	if rec.code >= http.StatusInternalServerError {
-		// A server failure is never stored: everything rolls back so the same
-		// key can retry the real work.
+	act := rec.settlement()
+	if act == settleRelease {
+		// A server failure and a RETRYABLE refusal are never stored: everything
+		// rolls back (the deferred rollback) so the same key can retry the work.
 		flush(w, rec)
 		return
 	}
-	if err := k.settle(ctx, tx, sp, key, rec, kept.Load()); err != nil {
+	if err := k.settle(ctx, tx, sp, key, rec, act); err != nil {
 		writeError(w, r, err)
 		return
 	}
@@ -273,12 +271,12 @@ func (k *keyed) runFresh(ctx context.Context, w http.ResponseWriter, r *http.Req
 	flush(w, rec)
 }
 
-// settle keeps the handler's writes on a success and drops them on a 4xx, unless
-// the handler asked to keep them (keepWrites), then stores the outcome and
-// commits.
-func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, rec *capture, keepWrites bool) error {
+// settle ends the savepoint as act says (committed, or rolled back for a FINAL
+// refusal), then stores the outcome and commits; a settleRecord answer is not
+// stored, its key row is deleted in the same transaction.
+func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, rec *capture, act settlement) error {
 	var err error
-	if rec.code >= http.StatusBadRequest && !keepWrites {
+	if act == settleFinal {
 		err = sp.Rollback(ctx)
 	} else {
 		err = sp.Commit(ctx)
@@ -286,39 +284,14 @@ func (k *keyed) settle(ctx context.Context, tx, sp pgx.Tx, key string, rec *capt
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE idempotency_keys SET response_status = $1, response_body = $2 WHERE key = $3`,
-		rec.code, rec.body.Bytes(), key); err != nil {
+	if act == settleRecord {
+		_, err = tx.Exec(ctx, `DELETE FROM idempotency_keys WHERE key = $1`, key)
+	} else {
+		_, err = tx.Exec(ctx, `UPDATE idempotency_keys SET response_status = $1, response_body = $2 WHERE key = $3`,
+			rec.code, rec.body.Bytes(), key)
+	}
+	if err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
-}
-
-type keepKey struct{}
-
-// withKeepWrites returns a context carrying the flag a handler raises (keepWrites)
-// to have the middleware commit its writes although it answers a 4xx.
-func withKeepWrites(ctx context.Context) (context.Context, *atomic.Bool) {
-	flag := new(atomic.Bool)
-	return context.WithValue(ctx, keepKey{}, flag), flag
-}
-
-// keepWrites tells the Idempotency-Key middleware to commit the writes of this
-// request although it answers a 4xx: a FAILED feed is a recorded fact (ADR 0002,
-// A11) that GET /inventory-feeds/{feedId} must show. Outside the middleware it
-// does nothing, the unit of work has committed already.
-func keepWrites(ctx context.Context) {
-	if flag, ok := ctx.Value(keepKey{}).(*atomic.Bool); ok {
-		flag.Store(true)
-	}
-}
-
-// flush copies the captured response onto the real client connection.
-func flush(w http.ResponseWriter, rec *capture) {
-	for name, vs := range rec.header {
-		for _, v := range vs {
-			w.Header().Add(name, v)
-		}
-	}
-	w.WriteHeader(rec.code)
-	_, _ = w.Write(rec.body.Bytes())
 }

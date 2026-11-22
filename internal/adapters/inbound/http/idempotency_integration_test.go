@@ -38,7 +38,11 @@ type pgRig struct {
 	handler http.Handler
 }
 
-func newPGRig(t *testing.T) *pgRig {
+func newPGRig(t *testing.T) *pgRig { return newPGRigWith(t, nil) }
+
+// newPGRigWith is newPGRig with a hook that may wrap the repositories in Deps
+// before the use cases are built (a test that needs a competing writer).
+func newPGRigWith(t *testing.T, wrap func(*usecases.Deps, *pgtest.Pool)) *pgRig {
 	t.Helper()
 	pool := pgtest.NewPool(t)
 	outbox := postgres.NewOutboxRepo(pool)
@@ -47,6 +51,9 @@ func newPGRig(t *testing.T) *pgRig {
 		Marks: postgres.NewNodeFeedMarks(pool), Nodes: postgres.NewNodeStatusRepo(pool), Sellers: postgres.NewSellerStatusRepo(pool), Inbox: postgres.NewProcessedEventRepo(pool),
 		Outbox: postgres.NewEventOutbox(outbox, outboundkafka.NewEncoder()), UoW: postgres.NewUnitOfWork(pool),
 		Clock: clock.System{}, IDs: ids.UUID{},
+	}
+	if wrap != nil {
+		wrap(&d, pool)
 	}
 	h, err := NewRouter(&Server{
 		CreateCatalogItem: usecases.NewCreateCatalogItem(d), DiscontinueItem: usecases.NewDiscontinueItem(d), DeclarePackLevel: usecases.NewDeclarePackLevel(d), RetirePackLevel: usecases.NewRetirePackLevel(d),

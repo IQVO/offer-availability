@@ -20,7 +20,7 @@ Docker is needed only for `make integration`; every other target runs offline.
 | Unit, adapters | `internal/adapters/inbound/http` (handlers, idempotency middleware, telemetry), `inbound/mcp`, `inbound/a2a`, `inbound/kafka` (consumer, tracing), `inbound/requestlog`, `outbound/kafka` (encoder, writer, relay sink, health), `outbound/outbox`, `outbound/telemetry`, `outbound/postgres` (outbox trace), `kafka/cloudevents`, `bootretry`, `cmd/*` (config, telemetry, routers) | Wire contracts, status codes, problem slugs, CloudEvents envelope, retries | `make test` |
 | Acceptance (godog / Gherkin) | `features/*.feature` + `features/*_test.go` | End-to-end behaviour through the REST handlers over in-memory adapters | `make bdd`, and inside `make test` |
 | Repository contract | `internal/adapters/outbound/repocontract` | One behavioural suite that both the in-memory adapter (`memory_test.go`) and the Postgres adapter (`postgres_integration_test.go`) must pass | `make test`, `make integration` |
-| Integration (testcontainers) | files tagged `//go:build integration`: `cmd/api/e2e_integration_test.go`, `cmd/api/main_integration_test.go`, `cmd/mcp/main_integration_test.go`, `cmd/a2a/main_integration_test.go`, `internal/adapters/inbound/http/idempotency_integration_test.go`, `internal/adapters/outbound/outbox/relay_integration_test.go`, `internal/adapters/outbound/postgres/{postgres,outbox,outbox_trace}_integration_test.go` | Real Postgres and Kafka: repositories, outbox drain and trace propagation, the relay, the idempotency middleware, the real-wiring boot and the consumer flow | `make integration` |
+| Integration (testcontainers) | files tagged `//go:build integration`: `cmd/api/e2e_integration_test.go`, `cmd/api/main_integration_test.go`, `cmd/mcp/main_integration_test.go`, `cmd/a2a/main_integration_test.go`, `internal/adapters/inbound/http/idempotency_integration_test.go`, `internal/adapters/inbound/http/idempotency_replay_integration_test.go`, `internal/adapters/outbound/outbox/relay_integration_test.go`, `internal/adapters/outbound/postgres/{postgres,outbox,outbox_trace}_integration_test.go` | Real Postgres and Kafka: repositories, outbox drain and trace propagation, the relay, the idempotency middleware, the real-wiring boot and the consumer flow | `make integration` |
 | Contract against the specs | `internal/architecture/catalogue_fitness_test.go` (`TestEventCatalogueMatchesContract`), `internal/adapters/inbound/mcp/governance_test.go` (`TestToolRegistryGolden`) and the Spectral lint of `apis/*.yaml` in CI | The event catalogue matches `apis/asyncapi.yaml`; the MCP tool registry matches its golden file | `make arch-test`, `make test`, CI `api-lint` |
 | Fitness (architecture) | `internal/architecture/*_test.go`, 14 files | Layering and runtime rules, see below | `make arch-test` |
 | Mutation | `.gremlins.yaml`, gremlins v0.6.0 on `internal/domain` | The domain tests assert rather than merely execute | `make mutation`, `make mutation-full`, CI |
@@ -48,6 +48,7 @@ executes as **233 scenarios** because the Examples rows of the Scenario Outlines
 | `features/node_status.feature` | 8 | Node events suppressing and restoring listings, older events ignored |
 | `features/listings.feature` | 5 | Listing creation, duplicate pair, suppression at creation |
 | `features/idempotency.feature` | 5 | Replay, key reuse, missing key |
+| `internal/adapters/inbound/http/idempotency_replay_classes_test.go` (+ `replay_class_test.go`) | 20+ | The fleet replay-class suite over the real middleware (no Docker), the class of every problem type, the ADR 0016 table held equal to the catalogue |
 | `features/returns_restock_rules.feature` | 5 | Return completions restock owner listings (ADR 0015) |
 | `features/catalog.feature` | 4 | Item creation, discontinuation cascade |
 | `features/ownerref.feature` | 4 | Seller-owned listings next to the operator-owned one |
@@ -69,9 +70,10 @@ executes as **233 scenarios** because the Examples rows of the Scenario Outlines
 | `make vuln` | `govulncheck ./...` |
 | `make guide-lint`, `make harness-test` | Lint the agent guides; unit-test the agent hooks |
 
-`.gremlins.yaml` sets one worker, timeout coefficient 30 and **efficacy and mutant-coverage thresholds of 90**
-(gremlins fails at or below the threshold). Measured on 2026-10-23: `catalog` 14/14, `feed` 67/67, `listing` 37/37,
-`nodestatus` 15/15, `shared` 31/31 mutants killed.
+`.gremlins.yaml` sets one worker, timeout coefficient 30, an **efficacy threshold of 98 and a mutant-coverage threshold
+of 99** as plain integers (gremlins fails at or below the threshold, and ignores a quoted string). Measured on 2026-11-15:
+`catalog` 94 killed and 1 lived of 95 (an equivalent mutant, see `MUTATION.md`), `feed` 67/67, `listing` 56/56,
+`nodestatus` 15/15, `sellerstatus` 8/8, `shared` 187/187.
 
 ## Fitness tests (`internal/architecture`)
 

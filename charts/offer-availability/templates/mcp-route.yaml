@@ -19,6 +19,10 @@ metadata:
   labels:
     {{- include "offer-availability.labels" . | nindent 4 }}
     app.kubernetes.io/component: mcp
+  {{- with include "offer-availability.kongPluginNames" . }}
+  annotations:
+    konghq.com/plugins: {{ . | quote }}
+  {{- end }}
 spec:
   parentRefs:
     {{- range .Values.mcp.route.parentRefs }}

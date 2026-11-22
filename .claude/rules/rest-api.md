@@ -32,13 +32,18 @@ registered in `internal/adapters/inbound/http/handlers.go`, wired in
   (`invalid-item-dimensions` 422, `duplicate-listing` 409, `negative-availability`
   422, `listing-not-on-node` 422, `feed-already-applied` 409, ...); an unmapped
   error is an opaque 500 `internal-error`. A new `Err` needs a catalogue row in
-  `problems.go` (`TestProblemCatalogueMapsEveryModelError` walks the catalogue).
+  `problems.go` (`TestProblemCatalogueMapsEveryModelError` walks the catalogue) WITH its replay
+  class (FINAL, OUTCOME or RETRYABLE; `TestEveryProblemTypeDeclaresAReplayClass` fails without one,
+  `TestTheADRTableEqualsTheCatalogue` wants the row in ADR 0016). When unsure: RETRYABLE.
 - **FAILED feed**: the 422 has the `instance` `/inventory-feeds/{feedId}` and the
-  feed row is kept (`keepWrites`, ADR 0005): `GET /inventory-feeds/{feedId}` shows
-  `FAILED` and its `failureCode`.
+  feed row is kept (the replay class of its problem, ADR 0016: `negative-availability`
+  OUTCOME, `listing-not-on-node` RETRYABLE with a record): `GET /inventory-feeds/{feedId}`
+  shows `FAILED` and its `failureCode`.
 - **Idempotency-Key** is required on all four state-changing routes
-  (`idempotency.go`): same key + same request replays the first response
-  (`Idempotency-Replayed: true`), same key + other request is 409
+  (`idempotency.go`): same key + same request replays the stored response
+  (`Idempotency-Replayed: true`; only a 2xx, a FINAL or an OUTCOME refusal is stored,
+  a RETRYABLE refusal and a 5xx release the key and the retry runs again), same key + other
+  stored request is 409
   `idempotency-key-reused`, missing key 400 `idempotency-key-required`, keys live
   24 h in `idempotency_keys`. A new state-changing route registers through
   `Server.keyed`, never `r.Post`.

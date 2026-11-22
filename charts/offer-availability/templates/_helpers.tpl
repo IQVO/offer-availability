@@ -192,3 +192,18 @@ Deployment includes it, so a mis-set release fails `helm template` /
 {{- include "offer-availability.requireNoOwnedEnv" (dict "list" .Values.extraEnv "where" "extraEnv") -}}
 {{- include "offer-availability.requireGracePeriod" . -}}
 {{- end -}}
+
+{{/*
+Comma-joined names of this chart's enabled KongPlugins, for the
+konghq.com/plugins annotation on every HTTPRoute this chart renders.
+Empty string (annotation omitted) when none are enabled.
+*/}}
+{{- define "offer-availability.kongPluginNames" -}}
+{{- $names := list -}}
+{{- range $name, $cfg := .Values.kongPlugins -}}
+{{- if $cfg.enabled -}}
+{{- $names = append $names (printf "%s-%s" (include "offer-availability.fullname" $) $name) -}}
+{{- end -}}
+{{- end -}}
+{{- join "," $names -}}
+{{- end -}}
