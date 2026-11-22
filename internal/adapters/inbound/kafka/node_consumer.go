@@ -120,12 +120,12 @@ func (c *NodeConsumer) HandleMessage(ctx context.Context, value []byte) error {
 	logger := defaultLogger(c.Logger)
 	e, err := cloudevents.Decode(value)
 	if err != nil {
-		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", NodeTopic, "error", err)
+		logger.WarnContext(ctx, "skipping a message that is not a valid CloudEvent", "topic", NodeTopic, "error", sanitizeErr(err))
 		return nil
 	}
 	ev, handled, err := nodeEventFrom(e)
 	if err != nil {
-		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", e.Type(), "event_id", e.ID(), "error", err)
+		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "error", sanitizeErr(err))
 		return fmt.Errorf("%w: %w", errPoison, err)
 	}
 	if !handled {
@@ -133,11 +133,11 @@ func (c *NodeConsumer) HandleMessage(ctx context.Context, value []byte) error {
 	}
 	err = c.UseCase.Execute(ctx, ev)
 	if errors.Is(err, shared.ErrValidation) {
-		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", e.Type(), "event_id", e.ID(), "error", err)
+		logger.WarnContext(ctx, "an event can never be applied; it goes to the dead-letter topic", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "error", sanitizeErr(err))
 		return fmt.Errorf("%w: %w", errPoison, err)
 	}
 	if err == nil {
-		logger.InfoContext(ctx, "event processed", "type", e.Type(), "event_id", e.ID(), "subject", e.Subject())
+		logger.InfoContext(ctx, "event processed", "type", sanitizeLog(e.Type()), "event_id", sanitizeLog(e.ID()), "subject", sanitizeLog(e.Subject()))
 	}
 	return err
 }
